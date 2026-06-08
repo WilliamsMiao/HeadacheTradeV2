@@ -85,25 +85,32 @@ settings = {
     "lang": "chs",
     "log_level": "info",
     "push_proto_type": "0",
-    "qot_push_frequency": "",
     "telnet_ip": "127.0.0.1",
     "telnet_port": "22222",
-    "websocket_ip": "127.0.0.1",
-    "websocket_port": "",
-    "websocket_key_md5": "",
-    "websocket_private_key": "",
-    "websocket_cert": "",
-    "rsa_private_key": "",
     "price_reminder_push": "0",
     "auto_hold_quote_right": "1",
-    "future_trade_api_time_zone": "America/New_York",
+    "future_trade_api_time_zone": "UTC-5",
     "pdt_protection": "1",
     "dtcall_confirmation": "1",
     "console": "0",
     "no_monitor": "1",
 }
 
+optional_disabled = {
+    "qot_push_frequency",
+    "rsa_private_key",
+    "websocket_ip",
+    "websocket_port",
+    "websocket_key_md5",
+    "websocket_private_key",
+    "websocket_cert",
+}
+
 index = {child.tag.lower(): child for child in list(root)}
+for child in list(root):
+    if child.tag.lower() in optional_disabled:
+        root.remove(child)
+
 for key, value in settings.items():
     node = index.get(key.lower())
     if node is None:
