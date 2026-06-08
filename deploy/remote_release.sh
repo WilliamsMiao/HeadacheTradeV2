@@ -53,3 +53,7 @@ systemctl daemon-reload
 systemctl enable "${SERVICE_NAME}"
 systemctl restart "${SERVICE_NAME}"
 systemctl status "${SERVICE_NAME}" --no-pager --lines=30
+
+if [[ "${INSTALL_FUTU_OPEND:-1}" == "1" ]]; then
+  bash "${RELEASE_DIR}/deploy/install_futu_opend.sh"
+fi

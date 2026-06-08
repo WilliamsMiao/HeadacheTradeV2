@@ -63,4 +63,12 @@ GitHub Actions 自动部署需要在仓库 Secrets 中配置：
 
 工作流会在 `main` 分支 push 后运行测试，通过后打包代码上传到服务器并重启 `headachetrade.service`。
 
-如果要在服务器上同步真实行情，需要服务器本机或可访问地址运行 Futu OpenD，并在 `/etc/headachetrade/headachetrade.env` 中设置 `FUTU_HOST` 和 `FUTU_PORT`。
+生产发布会在服务器缺少 OpenD 时自动安装 Futu OpenD。安装路径为 `/opt/futu-opend`，systemd 服务为 `futu-opend.service`，默认监听本机 `127.0.0.1:11111`。Futu 登录信息只保存在服务器本机，不进入 Git：
+
+```bash
+sudo nano /etc/futu-opend/futu-opend.env
+sudo systemctl restart futu-opend
+sudo systemctl status futu-opend
+```
+
+如果要改 OpenD 连接地址，在 `/etc/headachetrade/headachetrade.env` 中设置 `FUTU_HOST` 和 `FUTU_PORT`。
