@@ -188,3 +188,10 @@ class ReviewStat(Base, TimestampMixin):
     metric: Mapped[str] = mapped_column(String(64), index=True)
     value: Mapped[float] = mapped_column(Float)
 
+
+class SystemConfig(Base, TimestampMixin):
+    __tablename__ = "system_configs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    key: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    value: Mapped[str] = mapped_column(Text, default="")

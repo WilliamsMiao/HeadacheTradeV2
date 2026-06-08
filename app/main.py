@@ -1,8 +1,7 @@
 from pathlib import Path
-import socket
 
 from fastapi import Depends, FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
@@ -12,6 +11,16 @@ from starlette.requests import Request
 
 from app.config import get_settings
 from app.db import get_session, init_db
+from app.db import SessionLocal
+from app.auth import (
+    clear_cookie_kwargs,
+    cookie_kwargs,
+    create_session_cookie,
+    password_is_configured,
+    request_is_authenticated,
+    setup_password,
+    verify_password,
+)
 from app.models import (
     ApprovalRecord,
     Indicator,
@@ -30,6 +39,7 @@ from app.models import (
 from app.services.approvals import approve_signal, reject_signal
 from app.services.backtest import run_backtest
 from app.services.pipeline import run_compute_indicators, run_full_refresh, run_pipeline, run_sync_watchlist, run_update_market_data
+from app.services import opend_admin
 from app.services.risk import get_or_create_risk_config
 from app.presentation import (
     describe_market_state,
@@ -74,9 +84,99 @@ class RiskConfigUpdate(BaseModel):
     cooldown_days: int
 
 
+class PasswordPayload(BaseModel):
+    password: str
+
+
+class LoginPayload(BaseModel):
+    password: str
+
+
+class OpenDConfigPayload(BaseModel):
+    login_account: str
+    login_password: str
+    trd_unlock_password: str = ""
+
+
+class OpenDCodePayload(BaseModel):
+    kind: str
+    code: str
+
+
+PUBLIC_PATHS = {
+    "/health",
+    "/login",
+    "/setup-password",
+    "/api/auth/login",
+    "/api/auth/setup-password",
+}
+
+
 @app.on_event("startup")
 def startup() -> None:
     init_db()
+
+
+@app.middleware("http")
+async def require_authentication(request: Request, call_next):
+    path = request.url.path
+    if path.startswith("/static/") or path in PUBLIC_PATHS:
+        return await call_next(request)
+
+    with SessionLocal() as session:
+        configured = password_is_configured(session)
+        authenticated = request_is_authenticated(request, session) if configured else False
+
+    if not configured:
+        if path.startswith("/api/") or path.startswith("/tasks/"):
+            return JSONResponse({"detail": "请先设置访问密码"}, status_code=403)
+        return RedirectResponse("/setup-password", status_code=303)
+    if not authenticated:
+        if path.startswith("/api/") or path.startswith("/tasks/"):
+            return JSONResponse({"detail": "请先登录"}, status_code=401)
+        return RedirectResponse("/login", status_code=303)
+    return await call_next(request)
+
+
+@app.get("/setup-password", response_class=HTMLResponse)
+def setup_password_page(request: Request, session: Session = Depends(get_session)):
+    if password_is_configured(session):
+        return RedirectResponse("/login", status_code=303)
+    return templates.TemplateResponse(request, "setup_password.html", {"error": ""})
+
+
+@app.post("/api/auth/setup-password")
+def setup_password_api(payload: PasswordPayload, session: Session = Depends(get_session)):
+    try:
+        setup_password(session, payload.password)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    response = JSONResponse({"status": "ok"})
+    response.set_cookie(**cookie_kwargs(create_session_cookie(session)))
+    return response
+
+
+@app.get("/login", response_class=HTMLResponse)
+def login_page(request: Request, session: Session = Depends(get_session)):
+    if not password_is_configured(session):
+        return RedirectResponse("/setup-password", status_code=303)
+    return templates.TemplateResponse(request, "login.html", {"error": ""})
+
+
+@app.post("/api/auth/login")
+def login_api(payload: LoginPayload, session: Session = Depends(get_session)):
+    if not verify_password(session, payload.password):
+        raise HTTPException(status_code=401, detail="访问密码不正确")
+    response = JSONResponse({"status": "ok"})
+    response.set_cookie(**cookie_kwargs(create_session_cookie(session)))
+    return response
+
+
+@app.post("/api/auth/logout")
+def logout_api():
+    response = JSONResponse({"status": "ok"})
+    response.delete_cookie(**clear_cookie_kwargs())
+    return response
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -132,6 +232,16 @@ def risk_page(request: Request, session: Session = Depends(get_session)):
     return templates.TemplateResponse(request, "risk.html", {"config": get_or_create_risk_config(session)})
 
 
+@app.get("/opend", response_class=HTMLResponse)
+def opend_page(request: Request):
+    status_result = opend_admin.status()
+    return templates.TemplateResponse(
+        request,
+        "opend.html",
+        {"status": _opend_payload(status_result), "message": status_result.message},
+    )
+
+
 @app.post("/api/risk")
 def update_risk_config(payload: RiskConfigUpdate, session: Session = Depends(get_session)):
     config = get_or_create_risk_config(session)
@@ -151,6 +261,43 @@ def approve(signal_id: int, session: Session = Depends(get_session)):
 def reject(signal_id: int, session: Session = Depends(get_session)):
     reject_signal(session, signal_id)
     return {"status": "rejected"}
+
+
+@app.get("/api/opend/status")
+def api_opend_status():
+    return _opend_payload(opend_admin.status())
+
+
+@app.post("/api/opend/install")
+def api_opend_install():
+    return _opend_payload(opend_admin.install())
+
+
+@app.post("/api/opend/configure")
+def api_opend_configure(payload: OpenDConfigPayload):
+    return _opend_payload(opend_admin.configure(payload.login_account, payload.login_password, payload.trd_unlock_password))
+
+
+@app.post("/api/opend/start")
+def api_opend_start():
+    return _opend_payload(opend_admin.start())
+
+
+@app.post("/api/opend/stop")
+def api_opend_stop():
+    return _opend_payload(opend_admin.stop())
+
+
+@app.post("/api/opend/restart")
+def api_opend_restart():
+    return _opend_payload(opend_admin.restart())
+
+
+@app.post("/api/opend/verify-code")
+def api_opend_verify_code(payload: OpenDCodePayload):
+    if payload.kind not in {"phone", "captcha"}:
+        raise HTTPException(status_code=400, detail="验证码类型无效")
+    return _opend_payload(opend_admin.verify_code(payload.kind, payload.code))
 
 
 @app.post("/tasks/{task_name}")
@@ -180,14 +327,13 @@ def health() -> dict[str, str]:
 
 @app.get("/api/opend/health")
 def opend_health() -> dict[str, object]:
-    settings = get_settings()
-    host = settings.futu_host
-    port = settings.futu_port
-    try:
-        with socket.create_connection((host, port), timeout=2.0):
-            return {"status": "ok", "host": host, "port": port, "connected": True}
-    except OSError as exc:
-        return {"status": "error", "host": host, "port": port, "connected": False, "error": str(exc)}
+    return opend_admin.opend_socket_health()
+
+
+def _opend_payload(result: opend_admin.AdminResult) -> dict[str, object]:
+    payload = {"ok": result.ok, "message": result.message, **result.data}
+    payload["socket_health"] = opend_admin.opend_socket_health()
+    return payload
 
 
 def _dashboard_context(session: Session) -> dict[str, object]:

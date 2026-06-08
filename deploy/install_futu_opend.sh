@@ -80,7 +80,6 @@ root = tree.getroot()
 
 settings = {
     "ip": "127.0.0.1",
-    "api_ip": "127.0.0.1",
     "api_port": "11111",
     "lang": "chs",
     "log_level": "info",
@@ -92,11 +91,12 @@ settings = {
     "future_trade_api_time_zone": "UTC-5",
     "pdt_protection": "1",
     "dtcall_confirmation": "1",
-    "console": "0",
-    "no_monitor": "1",
 }
 
 optional_disabled = {
+    "api_ip",
+    "console",
+    "no_monitor",
     "qot_push_frequency",
     "rsa_private_key",
     "websocket_ip",
@@ -134,6 +134,34 @@ set -euo pipefail
 
 cd /opt/futu-opend/current
 
+if [[ -n "${FUTU_LOGIN_ACCOUNT:-}" && -n "${FUTU_LOGIN_PASSWORD:-}" ]]; then
+  python3 - <<'PY'
+import hashlib
+import os
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+path = Path("/opt/futu-opend/current/FutuOpenD.xml")
+tree = ET.parse(path)
+root = tree.getroot()
+
+def set_text(key: str, value: str) -> None:
+    for child in root:
+        if child.tag == key:
+            child.text = value
+            return
+    ET.SubElement(root, key).text = value
+
+for child in list(root):
+    if child.tag == "login_pwd":
+        root.remove(child)
+
+set_text("login_account", os.environ["FUTU_LOGIN_ACCOUNT"])
+set_text("login_pwd_md5", hashlib.md5(os.environ["FUTU_LOGIN_PASSWORD"].encode("utf-8")).hexdigest())
+tree.write(path, encoding="utf-8", xml_declaration=True)
+PY
+fi
+
 args=()
 args+=("-cfg_file=/opt/futu-opend/current/FutuOpenD.xml")
 args+=("-api_ip=127.0.0.1")
@@ -141,15 +169,6 @@ args+=("-api_port=11111")
 args+=("-lang=chs")
 args+=("-log_level=info")
 args+=("-no_monitor=1")
-if [[ -n "${FUTU_LOGIN_ACCOUNT:-}" ]]; then
-  args+=("-login_account=${FUTU_LOGIN_ACCOUNT}")
-fi
-if [[ -n "${FUTU_LOGIN_PASSWORD:-}" ]]; then
-  args+=("-login_pwd=${FUTU_LOGIN_PASSWORD}")
-fi
-if [[ -n "${FUTU_TRD_UNLOCK_PASSWORD:-}" ]]; then
-  args+=("-trd_unlock_pwd=${FUTU_TRD_UNLOCK_PASSWORD}")
-fi
 
 exec ./FutuOpenD "${args[@]}"
 EOF

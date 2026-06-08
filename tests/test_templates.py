@@ -1,12 +1,25 @@
 from fastapi.testclient import TestClient
+from sqlalchemy import delete
 
 from app.db import init_db
+from app.db import SessionLocal
 from app.main import app
+from app.models import SystemConfig
+
+
+def authenticated_client() -> TestClient:
+    init_db()
+    with SessionLocal() as session:
+        session.execute(delete(SystemConfig))
+        session.commit()
+    client = TestClient(app)
+    response = client.post("/api/auth/setup-password", json={"password": "local-test-password"})
+    assert response.status_code == 200
+    return client
 
 
 def test_dashboard_renders_chinese_labels_without_key_internal_tags():
-    init_db()
-    client = TestClient(app)
+    client = authenticated_client()
     response = client.get("/")
     assert response.status_code == 200
     assert "结构趋势交易闭环" in response.text
@@ -17,11 +30,50 @@ def test_dashboard_renders_chinese_labels_without_key_internal_tags():
 
 
 def test_risk_page_groups_settings_in_chinese():
-    init_db()
-    client = TestClient(app)
+    client = authenticated_client()
     response = client.get("/risk")
     assert response.status_code == 200
     assert "账户风险" in response.text
     assert "剧本调整" in response.text
     assert "仓位限制" in response.text
     assert "冷却机制" in response.text
+
+
+def test_opend_page_requires_auth_then_renders(monkeypatch):
+    from app.services import opend_admin
+
+    monkeypatch.setattr(
+        opend_admin,
+        "status",
+        lambda: opend_admin.AdminResult(
+            True,
+            "状态已刷新",
+            {
+                "installed": True,
+                "service_active": "active",
+                "service_enabled": "enabled",
+                "api_port_open": True,
+                "telnet_port_open": True,
+                "credentials_configured": False,
+                "needs_phone_code": True,
+                "needs_captcha_code": False,
+                "recent_log": "需要手机验证码",
+            },
+        ),
+    )
+    monkeypatch.setattr(
+        opend_admin,
+        "opend_socket_health",
+        lambda: {"status": "ok", "host": "127.0.0.1", "port": 11111, "connected": True},
+    )
+    init_db()
+    with SessionLocal() as session:
+        session.execute(delete(SystemConfig))
+        session.commit()
+    anonymous = TestClient(app)
+    assert anonymous.get("/opend", follow_redirects=False).status_code == 303
+    client = authenticated_client()
+    response = client.get("/opend")
+    assert response.status_code == 200
+    assert "Futu OpenD 管理" in response.text
+    assert "手机验证码" in response.text

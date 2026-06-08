@@ -39,6 +39,31 @@ button:hover { filter: brightness(1.04); }
 button:disabled { opacity: .5; cursor: progress; }
 button.ghost { background: var(--surface); color: var(--text); }
 
+.auth-body {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: 24px;
+  background: linear-gradient(180deg, #f6f7f9 0%, #edf2f7 100%);
+}
+.auth-card {
+  width: min(440px, 100%);
+  display: grid;
+  gap: 16px;
+  padding: 28px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.auth-card h1 { font-size: 26px; }
+.auth-card p {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.auth-card .brand-mark { margin-bottom: 4px; }
+
 .shell-nav {
   position: fixed;
   inset: 0 auto 0 0;
@@ -77,6 +102,9 @@ button.ghost { background: var(--surface); color: var(--text); }
   padding: 0 12px;
   font-size: 13px;
   text-align: left;
+}
+.shell-nav nav button {
+  justify-content: flex-start;
 }
 
 .shell-main {
@@ -335,6 +363,30 @@ input {
   color: var(--text);
 }
 form button { justify-self: start; }
+.opend-actions {
+  margin-bottom: 0;
+}
+.compact-note {
+  padding: 12px 0 0;
+  line-height: 1.5;
+}
+.opend-status {
+  padding: 14px 16px;
+}
+.log-box {
+  max-height: 340px;
+  overflow: auto;
+  margin: 12px 0 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #101828;
+  color: #e5e7eb;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 .toast {
   position: fixed;
   right: 18px;

@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block content %}
+<header class="page-header compact">
+  <div>
+    <h1>Futu OpenD 管理</h1>
+    <p>安装、配置和启动都通过服务器本机的受控运维助手执行；OpenD 只监听 127.0.0.1，不暴露到公网。</p>
+  </div>
+  <section class="market-tile {{ 'market-risk-on' if status.socket_health.connected else 'market-risk-off' }}">
+    <span>后端连接</span>
+    <strong>{{ "已连接" if status.socket_health.connected else "未连接" }}</strong>
+    <small>{{ status.socket_health.host }}:{{ status.socket_health.port }}</small>
+  </section>
+</header>
+
+<section class="summary-grid">
+  <article class="summary-card">
+    <span>安装状态</span>
+    <strong>{{ "已安装" if status.installed else "未安装" }}</strong>
+    <small>/opt/futu-opend/current</small>
+  </article>
+  <article class="summary-card">
+    <span>服务状态</span>
+    <strong>{{ status.service_active or "unknown" }}</strong>
+    <small>systemd futu-opend</small>
+  </article>
+  <article class="summary-card">
+    <span>API 端口</span>
+    <strong>{{ "开放" if status.api_port_open else "关闭" }}</strong>
+    <small>127.0.0.1:11111</small>
+  </article>
+  <article class="summary-card">
+    <span>验证码</span>
+    <strong>{{ "需要处理" if status.needs_phone_code or status.needs_captcha_code else "暂无提示" }}</strong>
+    <small>{% if status.needs_phone_code %}需要手机验证码{% elif status.needs_captcha_code %}需要图形验证码{% else %}根据最近日志判断{% endif %}</small>
+  </article>
+</section>
+
+<section class="grid two">
+  <div class="panel form-panel">
+    <div class="panel-head"><h2>OpenD 登录配置</h2><span>密码只写入服务器 env，不回显</span></div>
+    <form id="opend-config-form">
+      <label>Futu 登录账号<input name="login_account" autocomplete="username" required><small>例如手机号、邮箱或用户 ID。</small></label>
+      <label>Futu 登录密码<input name="login_password" type="password" autocomplete="new-password" required><small>保存到 /etc/futu-opend/futu-opend.env。</small></label>
+      <label>交易解锁密码（可选）<input name="trd_unlock_password" type="password" autocomplete="new-password"><small>仅在你需要 OpenD 解锁交易时填写。</small></label>
+      <button type="submit">保存 OpenD 配置</button>
+    </form>
+  </div>
+
+  <div class="panel form-panel">
+    <div class="panel-head"><h2>服务操作</h2><span>所有操作都需要登录态</span></div>
+    <div class="toolbar opend-actions">
+      <button data-opend-action="install">安装/修复</button>
+      <button data-opend-action="start">启动</button>
+      <button data-opend-action="restart">重启</button>
+      <button data-opend-action="stop" class="ghost">停止</button>
+      <button data-opend-refresh class="ghost">刷新状态</button>
+    </div>
+    <p class="empty compact-note">如果频繁重启，Futu 可能刷新验证码。收到验证码后优先直接提交，不要反复重启 OpenD。</p>
+  </div>
+</section>
+
+<section class="grid two">
+  <div class="panel form-panel">
+    <div class="panel-head"><h2>手机验证码</h2><span>OpenD Telnet 命令 input_phone_verify_code</span></div>
+    <form id="opend-phone-code-form">
+      <label>手机验证码<input name="code" inputmode="numeric" autocomplete="one-time-code" required></label>
+      <button type="submit">提交手机验证码</button>
+    </form>
+  </div>
+  <div class="panel form-panel">
+    <div class="panel-head"><h2>图形验证码</h2><span>OpenD Telnet 命令 input_pic_verify_code</span></div>
+    <form id="opend-captcha-code-form">
+      <label>图形验证码<input name="code" autocomplete="one-time-code" required></label>
+      <button type="submit">提交图形验证码</button>
+    </form>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-head"><h2>最近状态</h2><span id="opend-message">{{ message }}</span></div>
+  <div class="opend-status" id="opend-status">
+    <dl class="metric-grid">
+      <div><dt>登录配置</dt><dd>{{ "已配置" if status.credentials_configured else "未配置" }}</dd></div>
+      <div><dt>Telnet 端口</dt><dd>{{ "开放" if status.telnet_port_open else "关闭" }}</dd></div>
+      <div><dt>服务自启</dt><dd>{{ status.service_enabled or "unknown" }}</dd></div>
+      <div><dt>操作结果</dt><dd>{{ "正常" if status.ok else "异常" }}</dd></div>
+    </dl>
+    <pre class="log-box">{{ status.recent_log or "暂无 OpenD 日志。" }}</pre>
+  </div>
+</section>
+{% endblock %}

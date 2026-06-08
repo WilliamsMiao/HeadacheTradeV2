@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>登录 HeadacheTradeV2</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body class="auth-body">
+  <main class="auth-card">
+    <span class="brand-mark">HT</span>
+    <h1>访问控制</h1>
+    <p>请输入系统访问密码。当前使用公网 IP HTTP 访问，请避免在不可信网络中操作。</p>
+    <form id="login-form">
+      <label>访问密码<input name="password" type="password" autocomplete="current-password" required autofocus></label>
+      <button type="submit">进入系统</button>
+    </form>
+  </main>
+  <div id="toast" class="toast" hidden></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

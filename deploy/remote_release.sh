@@ -15,7 +15,7 @@ fi
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y ca-certificates curl nginx
+apt-get install -y ca-certificates curl nginx sudo
 
 if ! command -v uv >/dev/null 2>&1; then
   curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -43,6 +43,13 @@ systemctl restart nginx
 
 chown -R "${APP_USER}:${APP_USER}" "${APP_ROOT}"
 ln -sfn "${RELEASE_DIR}" "${APP_ROOT}/current"
+
+install -m 0755 "${RELEASE_DIR}/deploy/opend_admin.py" /usr/local/sbin/headachetrade-opend-admin
+cat >/etc/sudoers.d/headachetrade-opend-admin <<EOF
+${APP_USER} ALL=(root) NOPASSWD: /usr/local/sbin/headachetrade-opend-admin *
+EOF
+chmod 0440 /etc/sudoers.d/headachetrade-opend-admin
+visudo -cf /etc/sudoers.d/headachetrade-opend-admin
 
 cd "${APP_ROOT}/current"
 sudo -u "${APP_USER}" uv sync --frozen --no-dev
