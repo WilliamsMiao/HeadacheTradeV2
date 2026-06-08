@@ -17,7 +17,7 @@ fi
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y ca-certificates curl gzip iproute2 procps tar
+apt-get install -y ca-certificates curl gzip iproute2 procps python3 tar
 
 if ! id "${SERVICE_USER}" >/dev/null 2>&1; then
   useradd --system --create-home --shell /usr/sbin/nologin "${SERVICE_USER}"
@@ -66,6 +66,61 @@ else
   rm -rf "${workdir}"
 fi
 
+CONFIG_FILE="${FUTU_OPEND_CONFIG_FILE:-${INSTALL_ROOT}/current/FutuOpenD.xml}"
+if [[ -f "${CONFIG_FILE}" ]]; then
+  cp -a "${CONFIG_FILE}" "${CONFIG_FILE}.bak.$(date -u +%Y%m%d%H%M%S)"
+  python3 - "${CONFIG_FILE}" <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+path = Path(sys.argv[1])
+tree = ET.parse(path)
+root = tree.getroot()
+
+settings = {
+    "ip": "127.0.0.1",
+    "api_ip": "127.0.0.1",
+    "api_port": "11111",
+    "lang": "chs",
+    "log_level": "info",
+    "push_proto_type": "0",
+    "qot_push_frequency": "",
+    "telnet_ip": "127.0.0.1",
+    "telnet_port": "22222",
+    "websocket_ip": "127.0.0.1",
+    "websocket_port": "",
+    "websocket_key_md5": "",
+    "websocket_private_key": "",
+    "websocket_cert": "",
+    "rsa_private_key": "",
+    "price_reminder_push": "0",
+    "auto_hold_quote_right": "1",
+    "future_trade_api_time_zone": "America/New_York",
+    "pdt_protection": "1",
+    "dtcall_confirmation": "1",
+    "console": "0",
+    "no_monitor": "1",
+}
+
+index = {child.tag.lower(): child for child in list(root)}
+for key, value in settings.items():
+    node = index.get(key.lower())
+    if node is None:
+        node = ET.SubElement(root, key)
+        index[key.lower()] = node
+    node.text = value
+
+tree.write(path, encoding="utf-8", xml_declaration=True)
+
+safe = {k: v for k, v in settings.items() if "pwd" not in k and "account" not in k}
+print("Applied Futu OpenD config:", safe)
+PY
+  chown "${SERVICE_USER}:${SERVICE_USER}" "${CONFIG_FILE}"
+else
+  echo "Futu OpenD config file not found: ${CONFIG_FILE}" >&2
+fi
+
 cat >/usr/local/bin/futu-opend-start <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -73,14 +128,20 @@ set -euo pipefail
 cd /opt/futu-opend/current
 
 args=()
+args+=("-cfg_file=/opt/futu-opend/current/FutuOpenD.xml")
+args+=("-api_ip=127.0.0.1")
+args+=("-api_port=11111")
+args+=("-lang=chs")
+args+=("-log_level=info")
+args+=("-no_monitor=1")
 if [[ -n "${FUTU_LOGIN_ACCOUNT:-}" ]]; then
-  args+=("-login_account" "${FUTU_LOGIN_ACCOUNT}")
+  args+=("-login_account=${FUTU_LOGIN_ACCOUNT}")
 fi
 if [[ -n "${FUTU_LOGIN_PASSWORD:-}" ]]; then
-  args+=("-login_pwd" "${FUTU_LOGIN_PASSWORD}")
+  args+=("-login_pwd=${FUTU_LOGIN_PASSWORD}")
 fi
 if [[ -n "${FUTU_TRD_UNLOCK_PASSWORD:-}" ]]; then
-  args+=("-trd_unlock_pwd" "${FUTU_TRD_UNLOCK_PASSWORD}")
+  args+=("-trd_unlock_pwd=${FUTU_TRD_UNLOCK_PASSWORD}")
 fi
 
 exec ./FutuOpenD "${args[@]}"

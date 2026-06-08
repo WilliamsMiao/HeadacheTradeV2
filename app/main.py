@@ -1,4 +1,5 @@
 from pathlib import Path
+import socket
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
@@ -175,6 +176,18 @@ def run_task(task_name: str, mock: bool = False, session: Session = Depends(get_
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/api/opend/health")
+def opend_health() -> dict[str, object]:
+    settings = get_settings()
+    host = settings.futu_host
+    port = settings.futu_port
+    try:
+        with socket.create_connection((host, port), timeout=2.0):
+            return {"status": "ok", "host": host, "port": port, "connected": True}
+    except OSError as exc:
+        return {"status": "error", "host": host, "port": port, "connected": False, "error": str(exc)}
 
 
 def _dashboard_context(session: Session) -> dict[str, object]:
