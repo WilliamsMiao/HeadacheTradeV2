@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title or "HeadacheTradeV2" }}</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <aside class="shell-nav">
+    <a class="brand" href="/">
+      <span class="brand-mark">HT</span>
+      <span>HeadacheTradeV2</span>
+    </a>
+    <nav>
+      <a href="/">看板</a>
+      <a href="/risk">风控</a>
+      <button data-task="run-pipeline">运行状态机</button>
+      <button data-task="run-backtest">生成复盘</button>
+    </nav>
+  </aside>
+  <main class="shell-main">
+    {% block content %}{% endblock %}
+  </main>
+  <div id="toast" class="toast" hidden></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

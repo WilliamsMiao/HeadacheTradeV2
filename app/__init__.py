@@ -1,0 +1,2 @@
+"""Structural trend trading MVP."""
+

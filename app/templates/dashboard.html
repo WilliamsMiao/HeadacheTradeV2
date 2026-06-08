@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block content %}
+<header class="page-header">
+  <div>
+    <h1>结构趋势交易闭环</h1>
+    <p>结构负责观察，趋势负责方向，触发负责入场，风控负责生存，退出负责兑现。</p>
+  </div>
+  <section class="market-tile {{ market.state|css_class if market else 'market-risk-off' }}">
+    <span>市场环境</span>
+    <strong>{{ market.state|label if market else "未计算" }}</strong>
+    <small>{{ market.state|market_desc if market else "接入 Futu OpenD 并运行闭环后生成市场状态" }}</small>
+  </section>
+</header>
+
+<section class="summary-grid">
+  <article class="summary-card">
+    <span>自选股</span>
+    <strong>{{ summary.watchlist }}</strong>
+    <small>来自 Futu OpenD</small>
+  </article>
+  <article class="summary-card">
+    <span>待审批</span>
+    <strong>{{ summary.pending_signals }}</strong>
+    <small>需要人工确认</small>
+  </article>
+  <article class="summary-card">
+    <span>模拟持仓</span>
+    <strong>{{ summary.open_positions }}</strong>
+    <small>仅模拟，不实盘</small>
+  </article>
+  <article class="summary-card risk">
+    <span>风险事项</span>
+    <strong>{{ summary.risk_items }}</strong>
+    <small>风险保护或退出候选</small>
+  </article>
+</section>
+
+<section class="toolbar" aria-label="数据任务">
+  <button data-task="sync-watchlist">同步自选股</button>
+  <button data-task="update-market-data">更新行情</button>
+  <button data-task="compute-indicators">计算指标</button>
+  <button data-task="run-pipeline">刷新状态机</button>
+</section>
+
+<section class="panel">
+  <div class="panel-head">
+    <h2>主看板</h2>
+    <span>评分仅展示，不参与状态机</span>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>代码</th>
+          <th>趋势 / 状态</th>
+          <th>最新结构</th>
+          <th>动作</th>
+          <th>风控</th>
+          <th>下一步</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td class="symbol-cell">
+            <a href="/symbols/{{ row.item.symbol }}">{{ row.item.symbol }}</a>
+            <small>{{ row.item.name }}</small>
+          </td>
+          <td>
+            <span class="state state-soft">{{ row.trend.trend|label if row.trend else "数据不足" }}</span>
+            <span class="state">{{ row.state.state|label if row.state else "空闲观察" }}</span>
+          </td>
+          <td>
+            {% if row.structure %}
+              <span class="state structure">{{ row.structure.event_type|label }}</span>
+              <small>{{ row.structure.event_ts|dt }}</small>
+            {% else %}-{% endif %}
+          </td>
+          <td>{{ row.signal.action if row.signal else ("持仓管理" if row.position else "观察") }}</td>
+          <td class="risk-cell">
+            {% if row.signal %}
+            <strong>止损 {{ row.signal.stop_price|price }}</strong>
+            <small>{{ row.signal.shares|shares }} · 仓位 {{ row.signal.target_position_pct|percent }}</small>
+            {% elif row.position %}
+            <strong>止损 {{ row.position.stop_price|price }}</strong>
+            <small>{{ row.position.shares|shares }} · {{ "%.2f"|format(row.position.current_r) }}R</small>
+            {% else %}-{% endif %}
+          </td>
+          <td>
+            <p class="reason-short" title="{{ (row.signal.reason if row.signal else (row.state.last_reason if row.state else ''))|reason }}">
+              {{ (row.signal.reason if row.signal else (row.state.last_reason if row.state else "等待趋势过滤"))|reason(72) }}
+            </p>
+            <small>{{ row.state.next_wait|reason(56) if row.state else "等待趋势过滤" }}</small>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="grid two">
+  <div class="panel">
+    <div class="panel-head"><h2>待审批建议</h2><span>批准后才进入模拟持仓</span></div>
+    {% for signal in signals %}
+    <article class="signal">
+      <header>
+        <div>
+          <strong>{{ signal.symbol }} · {{ signal.action }}</strong>
+          <small>{{ (signal.script or signal.signal_type)|script_desc }}</small>
+        </div>
+        <span class="state pending">{{ signal.status|label }}</span>
+      </header>
+      <p title="{{ signal.reason|reason }}">{{ signal.reason|reason }}</p>
+      <dl class="metric-grid">
+        <div><dt>建议入场</dt><dd>{{ signal.entry_price|price }}</dd></div>
+        <div><dt>初始止损</dt><dd>{{ signal.stop_price|price }}</dd></div>
+        <div><dt>建议股数</dt><dd>{{ signal.shares|shares }}</dd></div>
+        <div><dt>仓位占比</dt><dd>{{ signal.target_position_pct|percent }}</dd></div>
+        <div><dt>风险金额</dt><dd>{{ signal.risk_amount|money }}</dd></div>
+        <div><dt>展示评分</dt><dd>{{ signal.score_display or "-" }}</dd></div>
+      </dl>
+      <footer>
+        <button data-approve="{{ signal.id }}">批准并创建模拟持仓</button>
+        <button data-reject="{{ signal.id }}" class="ghost">拒绝建议</button>
+      </footer>
+    </article>
+    {% else %}<p class="empty">暂无待审批建议。</p>{% endfor %}
+  </div>
+
+  <div class="panel">
+    <div class="panel-head"><h2>模拟持仓与复盘</h2><span>只模拟，不实盘下单</span></div>
+    {% for position in positions %}
+    <article class="position">
+      <strong>{{ position.symbol }}</strong>
+      <span>{{ position.shares|shares }}</span>
+      <span>成本 {{ position.entry_price|price }}</span>
+      <span>止损 {{ position.stop_price|price }}</span>
+      <span>{{ "%.2f"|format(position.current_r) }}R</span>
+    </article>
+    {% else %}<p class="empty">暂无模拟持仓。</p>{% endfor %}
+    <div class="stats">
+      {% for stat in reviews %}
+      <span>{{ stat.metric|label }}: {{ "%.2f"|format(stat.value) }}</span>
+      {% else %}<span>运行回测后显示系统统计。</span>{% endfor %}
+    </div>
+  </div>
+</section>
+{% endblock %}

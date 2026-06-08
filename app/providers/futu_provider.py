@@ -1,0 +1,98 @@
+from datetime import datetime
+
+from app.config import Settings
+from app.domain import Bar, DAILY, HOUR_60
+from app.providers.base import MarketDataProvider
+
+
+class FutuProvider(MarketDataProvider):
+    def __init__(self, settings: Settings) -> None:
+        self.settings = settings
+
+    def _quote_context(self):
+        try:
+            from futu import OpenQuoteContext
+        except ImportError as exc:  # pragma: no cover
+            raise RuntimeError("futu-api is not installed. Install with: pip install -e '.[futu]'") from exc
+        return OpenQuoteContext(host=self.settings.futu_host, port=self.settings.futu_port)
+
+    def get_watchlist(self) -> list[dict[str, str]]:
+        quote_ctx = self._quote_context()
+        try:
+            group_name = self.settings.futu_watchlist_group or self._discover_watchlist_group(quote_ctx)
+            ret, data = quote_ctx.get_user_security(group_name)
+            if ret != 0:
+                raise RuntimeError(f"Futu get_user_security failed: {data}")
+            rows = data.to_dict("records")
+            output = []
+            for row in rows:
+                raw_code = str(row.get("code") or row.get("symbol") or "").upper()
+                if not raw_code.startswith("US."):
+                    continue
+                code = raw_code.replace("US.", "")
+                if not code or code.startswith("."):
+                    continue
+                output.append(
+                    {
+                        "symbol": code,
+                        "name": str(row.get("name") or code),
+                        "industry": str(row.get("industry") or ""),
+                        "source_group": group_name,
+                    }
+                )
+            return output
+        finally:
+            quote_ctx.close()
+
+    def _discover_watchlist_group(self, quote_ctx) -> str:
+        ret, data = quote_ctx.get_user_security_group()
+        if ret != 0:
+            raise RuntimeError(f"Futu get_user_security_group failed: {data}")
+        rows = data.to_dict("records")
+        if not rows:
+            raise RuntimeError("Futu has no watchlist groups")
+        preferred = ["美股", "US", "自选股", "全部"]
+        for name in preferred:
+            for row in rows:
+                group_name = str(row.get("group_name") or "")
+                if name.lower() in group_name.lower():
+                    return group_name
+        return str(rows[0]["group_name"])
+
+    def get_klines(
+        self,
+        symbol: str,
+        timeframe: str,
+        start: datetime | None = None,
+        end: datetime | None = None,
+    ) -> list[Bar]:
+        quote_ctx = self._quote_context()
+        try:
+            from futu import KLType
+
+            futu_symbol = symbol if symbol.startswith("US.") else f"US.{symbol}"
+            ktype = KLType.K_DAY if timeframe == DAILY else KLType.K_60M
+            start_s = start.strftime("%Y-%m-%d") if start else None
+            end_s = end.strftime("%Y-%m-%d") if end else None
+            ret, data, _ = quote_ctx.request_history_kline(futu_symbol, start=start_s, end=end_s, ktype=ktype, max_count=1000)
+            if ret != 0:
+                raise RuntimeError(f"Futu request_history_kline failed for {symbol} {timeframe}: {data}")
+            bars = []
+            for row in data.to_dict("records"):
+                ts_raw = row.get("time_key") or row.get("date")
+                ts = datetime.strptime(str(ts_raw), "%Y-%m-%d %H:%M:%S") if " " in str(ts_raw) else datetime.strptime(str(ts_raw), "%Y-%m-%d")
+                bars.append(
+                    Bar(
+                        symbol=symbol.upper(),
+                        timeframe=timeframe,
+                        ts=ts,
+                        open=float(row["open"]),
+                        high=float(row["high"]),
+                        low=float(row["low"]),
+                        close=float(row["close"]),
+                        volume=float(row.get("volume", 0)),
+                    )
+                )
+            return bars
+        finally:
+            quote_ctx.close()

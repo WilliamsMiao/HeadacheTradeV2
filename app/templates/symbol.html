@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block content %}
+<header class="page-header compact">
+  <div>
+    <h1>{{ item.symbol }} <span>{{ item.name }}</span></h1>
+    <p>
+      {{ trend.trend|label if trend else "数据不足" }}
+      · {{ state.state|label if state else "空闲观察" }}
+      · {{ state.next_wait|reason if state else "等待初始化" }}
+    </p>
+  </div>
+  {% if position %}
+  <section class="market-tile market-risk-on">
+    <span>模拟持仓</span>
+    <strong>{{ position.shares|shares }}</strong>
+    <small>止损 {{ position.stop_price|price }} · 滑动止盈 {{ position.trailing_stop|price }} · {{ "%.2f"|format(position.current_r) }}R</small>
+  </section>
+  {% endif %}
+</header>
+
+<section class="grid two">
+  <div class="panel">
+    <div class="panel-head"><h2>结构历史</h2><span>结构不直接买卖</span></div>
+    {% for event in structures %}
+    <article class="timeline">
+      <strong>{{ event.event_type|label }}</strong>
+      <time>{{ event.event_ts|dt }}</time>
+      <p>{{ event.reason|reason }}</p>
+      <small>后 5/10/20 根: {{ event.follow_5_return|return_pct }} · {{ event.follow_10_return|return_pct }} · {{ event.follow_20_return|return_pct }}</small>
+    </article>
+    {% else %}<p class="empty">暂无结构事件。</p>{% endfor %}
+  </div>
+  <div class="panel">
+    <div class="panel-head"><h2>状态变化</h2><span>原因必须可复盘</span></div>
+    {% for log in logs %}
+    <article class="timeline">
+      <strong>{{ log.from_state|label }} → {{ log.to_state|label }}</strong>
+      <time>{{ log.created_at|dt }}</time>
+      <p>{{ log.reason|reason }}</p>
+    </article>
+    {% else %}<p class="empty">暂无状态变化。</p>{% endfor %}
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-head"><h2>日线指标快照</h2><span>按时间顺序计算，无未来函数</span></div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>时间</th><th>收盘价</th><th>20日均线</th><th>60日均线</th><th>DIF</th><th>DEA</th><th>MACD柱</th><th>ATR波动</th><th>20日量均</th></tr></thead>
+      <tbody>
+        {% for k in klines[:20] %}
+        {% set ind = indicators|selectattr("ts", "equalto", k.ts)|first %}
+        <tr>
+          <td>{{ k.ts|dt }}</td><td>{{ k.close|price }}</td>
+          <td>{{ ind.ma20|price if ind else "-" }}</td>
+          <td>{{ ind.ma60|price if ind else "-" }}</td>
+          <td>{{ ind.macd_dif|price if ind else "-" }}</td>
+          <td>{{ ind.macd_dea|price if ind else "-" }}</td>
+          <td>{{ ind.macd_hist|price if ind else "-" }}</td>
+          <td>{{ ind.atr|price if ind else "-" }}</td>
+          <td>{{ "%.0f"|format(ind.volume_ma20 or 0) if ind else "-" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

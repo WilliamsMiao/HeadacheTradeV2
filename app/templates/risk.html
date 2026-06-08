@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block content %}
+<header class="page-header compact">
+  <div>
+    <h1>风控设置</h1>
+    <p>仓位由风险反推，不由看好程度或评分决定。</p>
+  </div>
+</header>
+
+<section class="panel form-panel">
+  <form id="risk-form">
+    <fieldset>
+      <legend>账户风险</legend>
+      <label>账户权益<input name="account_equity" type="number" step="100" value="{{ config.account_equity }}"><small>用于反推每笔交易允许亏损金额。</small></label>
+      <label>单笔风险比例<input name="risk_per_trade_pct" type="number" step="0.001" value="{{ config.risk_per_trade_pct }}"><small>例如 0.01 表示每笔最多亏损 1%。</small></label>
+    </fieldset>
+    <fieldset>
+      <legend>剧本调整</legend>
+      <label>中性市场风险乘数<input name="neutral_risk_multiplier" type="number" step="0.1" value="{{ config.neutral_risk_multiplier }}"><small>市场中性偏强时自动降低风险。</small></label>
+      <label>剧本 B 风险乘数<input name="script_b_risk_multiplier" type="number" step="0.1" value="{{ config.script_b_risk_multiplier }}"><small>顶结构失效追随剧本默认更小仓位。</small></label>
+    </fieldset>
+    <fieldset>
+      <legend>仓位限制</legend>
+      <label>最大持仓数<input name="max_positions" type="number" step="1" value="{{ config.max_positions }}"><small>限制组合同时持仓数量。</small></label>
+      <label>单股最大仓位<input name="max_symbol_position_pct" type="number" step="0.01" value="{{ config.max_symbol_position_pct }}"><small>限制单一股票占账户权益比例。</small></label>
+      <label>行业最大暴露<input name="max_industry_exposure_pct" type="number" step="0.01" value="{{ config.max_industry_exposure_pct }}"><small>限制同一行业集中风险。</small></label>
+    </fieldset>
+    <fieldset>
+      <legend>冷却机制</legend>
+      <label>冷却天数<input name="cooldown_days" type="number" step="1" value="{{ config.cooldown_days }}"><small>硬止损或结构失败后暂停新开仓。</small></label>
+    </fieldset>
+    <button type="submit">保存风控参数</button>
+  </form>
+</section>
+{% endblock %}

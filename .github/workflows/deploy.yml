@@ -1,0 +1,62 @@
+name: Deploy
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Install dependencies
+        run: uv sync --frozen --extra test
+      - name: Run tests
+        run: uv run pytest
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-24.04
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure SSH
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_PORT: ${{ secrets.SERVER_PORT }}
+          SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+        run: |
+          test -n "$SERVER_HOST"
+          test -n "$SERVER_USER"
+          test -n "$SERVER_SSH_KEY"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SERVER_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          PORT="${SERVER_PORT:-22}"
+          ssh-keyscan -p "$PORT" "$SERVER_HOST" >> ~/.ssh/known_hosts
+      - name: Upload and activate release
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_PORT: ${{ secrets.SERVER_PORT }}
+          RELEASE_ID: ${{ github.sha }}
+        run: |
+          PORT="${SERVER_PORT:-22}"
+          scp -i ~/.ssh/deploy_key -P "$PORT" deploy/remote_release.sh "$SERVER_USER@$SERVER_HOST:/tmp/headachetrade_remote_release.sh"
+          tar \
+            --exclude='.git' \
+            --exclude='.venv' \
+            --exclude='.pytest_cache' \
+            --exclude='__pycache__' \
+            --exclude='data/*.sqlite3' \
+            --exclude='data/*.sqlite3-*' \
+            -czf - . \
+          | ssh -i ~/.ssh/deploy_key -p "$PORT" "$SERVER_USER@$SERVER_HOST" \
+              "RELEASE_ID=$RELEASE_ID sudo -E bash /tmp/headachetrade_remote_release.sh"
