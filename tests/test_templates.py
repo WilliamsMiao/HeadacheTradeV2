@@ -1,9 +1,11 @@
 from fastapi.testclient import TestClient
 
+from app.db import init_db
 from app.main import app
 
 
 def test_dashboard_renders_chinese_labels_without_key_internal_tags():
+    init_db()
     client = TestClient(app)
     response = client.get("/")
     assert response.status_code == 200
@@ -15,6 +17,7 @@ def test_dashboard_renders_chinese_labels_without_key_internal_tags():
 
 
 def test_risk_page_groups_settings_in_chinese():
+    init_db()
     client = TestClient(app)
     response = client.get("/risk")
     assert response.status_code == 200
@@ -22,4 +25,3 @@ def test_risk_page_groups_settings_in_chinese():
     assert "剧本调整" in response.text
     assert "仓位限制" in response.text
     assert "冷却机制" in response.text
-
