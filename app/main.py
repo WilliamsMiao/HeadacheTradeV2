@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from starlette.requests import Request
 
 from app.config import get_settings
+from app.domain import STRUCTURE_TIMEFRAME
 from app.db import get_session, init_db
 from app.db import SessionLocal
 from app.auth import (
@@ -353,7 +354,15 @@ def _dashboard_context(session: Session) -> dict[str, object]:
     for item in items:
         trend = session.scalar(select(StockTrend).where(StockTrend.symbol == item.symbol).order_by(StockTrend.as_of.desc()).limit(1))
         state = session.scalar(select(TradingState).where(TradingState.symbol == item.symbol))
-        structure = session.scalar(select(StructureEvent).where(StructureEvent.symbol == item.symbol).order_by(StructureEvent.event_ts.desc()).limit(1))
+        structure = session.scalar(
+            select(StructureEvent)
+            .where(
+                StructureEvent.symbol == item.symbol,
+                StructureEvent.timeframe == STRUCTURE_TIMEFRAME,
+            )
+            .order_by(StructureEvent.event_ts.desc())
+            .limit(1)
+        )
         signal = session.scalar(select(TradeSignal).where(TradeSignal.symbol == item.symbol, TradeSignal.status == "PENDING").order_by(TradeSignal.created_at.desc()).limit(1))
         position = session.scalar(select(Position).where(Position.symbol == item.symbol, Position.status == "OPEN"))
         data_ok, data_reason = symbol_data_status(session, item.symbol)

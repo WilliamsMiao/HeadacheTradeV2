@@ -786,6 +786,34 @@ td a + small {
   line-height: 1.5;
 }
 
+.structure-levels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-subtle);
+}
+
+.structure-levels div {
+  display: flex;
+  gap: var(--space-1);
+  align-items: baseline;
+}
+
+.structure-levels dt {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.structure-levels dd {
+  color: var(--color-text-primary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+}
+
 .grid.two {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

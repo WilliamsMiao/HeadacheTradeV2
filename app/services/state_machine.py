@@ -3,7 +3,7 @@ from datetime import date, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.domain import DAILY, ENTRY_TRENDS, HOUR_60, TRADEABLE_MARKETS
+from app.domain import DAILY, ENTRY_TRENDS, HOUR_60, STRUCTURE_TIMEFRAME, TRADEABLE_MARKETS
 from app.models import Indicator, KLine, Position, StateTransitionLog, StructureEvent, TradeSignal, TradingState
 from app.services.risk import calculate_position_size, get_or_create_risk_config, portfolio_allows_new_position
 
@@ -31,7 +31,11 @@ def _transition(session: Session, record: TradingState, to_state: str, reason: s
 def _latest_event(session: Session, symbol: str, event_types: set[str]) -> StructureEvent | None:
     return session.scalar(
         select(StructureEvent)
-        .where(StructureEvent.symbol == symbol, StructureEvent.event_type.in_(event_types))
+        .where(
+            StructureEvent.symbol == symbol,
+            StructureEvent.timeframe == STRUCTURE_TIMEFRAME,
+            StructureEvent.event_type.in_(event_types),
+        )
         .order_by(StructureEvent.event_ts.desc())
         .limit(1)
     )

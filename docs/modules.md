@@ -30,6 +30,12 @@
 
 结构模块只写 `StructureEvent`，包括底钝化、底结构、底结构失败、顶钝化、顶结构、顶结构失效。结构事件不会直接产生买卖动作。
 
+60m `BOTTOM_STRUCTURE` 必须记录结构低点、确认价、失效价、到期时间和规则版本；`TOP_STRUCTURE` 必须记录结构高点及相同审计字段。失败/失效事件通过 `parent_event_id` 关联原结构，并结束对应结构生命周期。
+
+结构参数集中在 `app.strategy_config.StructureConfig`，不得在识别函数中散落阈值。
+
+状态机和主看板只读取 `STRUCTURE_TIMEFRAME` 指定的 60m 结构；旧数据库中遗留的日线结构记录仅保留用于历史审计，不再推动当前状态。
+
 ## 状态机与风控
 
 `app.services.state_machine` 是唯一推动交易状态和建议生成的模块。评分字段只在 `TradeSignal.score_display` 展示，不参与状态转换。

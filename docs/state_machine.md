@@ -30,3 +30,5 @@
 5m 仅用于后续工作台展示，缺失不会阻塞状态机。
 
 当前状态仍保留 `WAIT_ENTRY_TRIGGER`；按任务书顺序，`WAIT_15M_TRIGGER` 和正式 15m 触发转换将在 PR 3 引入。
+
+PR 2 提供的结构关键价位只用于记录和后续状态机输入。本 PR 不允许 `BOTTOM_STRUCTURE` 直接生成 ENTRY，也不允许 `TOP_STRUCTURE` 直接生成 EXIT。

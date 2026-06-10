@@ -15,7 +15,19 @@ HeadacheTradeV2 只生成交易建议和模拟持仓，不接实盘自动下单�
 
 ## 当前 PR 边界
 
-PR 1 已统一周期定义，并将 15m 接入行情、指标和数据完整性检查。60m 结构字段增强、15m 状态机触发、结构止损、纠错和时间步进回测将在后续 PR 按顺序实现。
+PR 1 已统一周期定义，并将 15m 接入行情、指标和数据完整性检查。
+
+PR 2 为 60m 结构事件增加：
+
+- `pivot_low / pivot_high`；
+- `confirm_level`；
+- `invalidation_level`；
+- `trigger_level`；
+- `parent_event_id`；
+- `expires_at`；
+- `script_version`。
+
+结构模块仍只记录事件，不生成买卖建议。15m 状态机触发、结构止损、纠错和时间步进回测将在后续 PR 按顺序实现。
 
 ## 不变约束
 

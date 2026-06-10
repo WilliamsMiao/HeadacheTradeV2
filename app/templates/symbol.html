@@ -23,10 +23,21 @@
     <div class="panel-head"><h2>结构历史</h2><span>结构不直接买卖</span></div>
     {% for event in structures %}
     <article class="timeline">
-      <strong>{{ event.event_type|label }}</strong>
+      <strong>{{ event.event_type|label }} · {{ event.timeframe|label }}</strong>
       <time>{{ event.event_ts|dt }}</time>
       <p>{{ event.reason|reason }}</p>
+      {% if event.pivot_low or event.pivot_high or event.confirm_level or event.invalidation_level %}
+      <dl class="structure-levels">
+        {% if event.pivot_low %}<div><dt>结构低点</dt><dd>{{ event.pivot_low|price }}</dd></div>{% endif %}
+        {% if event.pivot_high %}<div><dt>结构高点</dt><dd>{{ event.pivot_high|price }}</dd></div>{% endif %}
+        {% if event.confirm_level %}<div><dt>确认价</dt><dd>{{ event.confirm_level|price }}</dd></div>{% endif %}
+        {% if event.invalidation_level %}<div><dt>失效价</dt><dd>{{ event.invalidation_level|price }}</dd></div>{% endif %}
+        {% if event.trigger_level %}<div><dt>触发参考</dt><dd>{{ event.trigger_level|price }}</dd></div>{% endif %}
+        {% if event.expires_at %}<div><dt>结构到期</dt><dd>{{ event.expires_at|dt }}</dd></div>{% endif %}
+      </dl>
+      {% endif %}
       <small>后 5/10/20 根: {{ event.follow_5_return|return_pct }} · {{ event.follow_10_return|return_pct }} · {{ event.follow_20_return|return_pct }}</small>
+      {% if event.script_version %}<small>规则版本 {{ event.script_version }}</small>{% endif %}
     </article>
     {% else %}
     <div class="empty">
