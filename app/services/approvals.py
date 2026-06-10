@@ -16,6 +16,13 @@ def approve_signal(session: Session, signal_id: int, note: str = "") -> TradeSig
     if signal.signal_type == "ENTRY":
         if signal.stop_price is None or signal.entry_price is None or not signal.shares:
             raise ValueError("entry signal missing stop, entry, or shares")
+        if (
+            signal.source_structure_id is None
+            or signal.trigger_timeframe != "15m"
+            or signal.trigger_ts is None
+            or signal.trigger_level is None
+        ):
+            raise ValueError("entry signal missing structure or trigger source")
         position = Position(
             symbol=signal.symbol,
             entry_signal_id=signal.id,
@@ -72,4 +79,3 @@ def _cooldown(session: Session, symbol: str) -> None:
         record.state = "COOLDOWN"
         record.cooldown_until = date.today() + timedelta(days=config.cooldown_days)
         record.last_reason = "simulated exit approved, cooldown started"
-

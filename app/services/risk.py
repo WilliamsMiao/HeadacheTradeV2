@@ -1,8 +1,69 @@
+from dataclasses import dataclass
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.domain import RiskResult
-from app.models import Position, RiskConfig, WatchlistItem
+from app.domain import RiskResult, STRUCTURE_TIMEFRAME
+from app.models import Indicator, Position, RiskConfig, StructureEvent, WatchlistItem
+
+
+@dataclass(frozen=True)
+class StructureStop:
+    stop_price: float
+    atr: float
+    reference_level: float
+    reason: str
+
+
+def calculate_structure_stop(
+    session: Session,
+    structure: StructureEvent,
+    entry_price: float,
+    script: str,
+) -> StructureStop | None:
+    if structure.id is None or structure.timeframe != STRUCTURE_TIMEFRAME or entry_price <= 0:
+        return None
+    indicator = session.scalar(
+        select(Indicator)
+        .where(
+            Indicator.symbol == structure.symbol,
+            Indicator.timeframe == STRUCTURE_TIMEFRAME,
+            Indicator.ts == structure.event_ts,
+        )
+        .limit(1)
+    )
+    if indicator is None or indicator.atr is None or indicator.atr <= 0:
+        return None
+
+    if script == "SCRIPT_A_BOTTOM_TREND_RESUME":
+        if structure.event_type != "BOTTOM_STRUCTURE" or structure.pivot_low is None:
+            return None
+        reference_level = structure.pivot_low
+        stop_price = reference_level - indicator.atr * 0.5
+        reason = (
+            f"60m bottom structure pivot {reference_level:.2f} minus "
+            f"0.5 ATR ({indicator.atr:.2f})"
+        )
+    elif script == "SCRIPT_B_TOP_INVALIDATION_CONTINUATION":
+        if structure.event_type != "TOP_INVALIDATED" or structure.invalidation_level is None:
+            return None
+        reference_level = structure.invalidation_level
+        stop_price = reference_level - indicator.atr * 0.25
+        reason = (
+            f"60m top invalidation breakout {reference_level:.2f} minus "
+            f"0.25 ATR ({indicator.atr:.2f})"
+        )
+    else:
+        return None
+
+    if stop_price <= 0 or stop_price >= entry_price:
+        return None
+    return StructureStop(
+        stop_price=stop_price,
+        atr=indicator.atr,
+        reference_level=reference_level,
+        reason=reason,
+    )
 
 
 def get_or_create_risk_config(session: Session) -> RiskConfig:
@@ -65,4 +126,3 @@ def portfolio_allows_new_position(session: Session, symbol: str, config: RiskCon
         if same_industry_value / config.account_equity >= config.max_industry_exposure_pct:
             return False, f"industry exposure limit reached for {item.industry}"
     return True, "portfolio risk checks passed"
-

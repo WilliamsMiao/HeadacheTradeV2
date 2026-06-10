@@ -35,6 +35,17 @@ def test_reason_formatter_translates_structure_and_trigger_sources():
     assert "触发价=102.50" in rendered
 
 
+def test_reason_formatter_translates_structure_stop_and_risk_details():
+    rendered = format_reason(
+        "stop_source=60m bottom structure pivot 96.00 minus 0.5 ATR (2.00); "
+        "risk_per_share=7.50; allowed_loss=1000.00; position_value=13632.50"
+    )
+    assert "止损来源=60 分钟底结构低点 96.00" in rendered
+    assert "每股风险=7.50" in rendered
+    assert "允许亏损=1000.00" in rendered
+    assert "建议市值=13632.50" in rendered
+
+
 def test_number_formatters_are_human_readable():
     assert format_money(1234.5) == "$1,234.50"
     assert format_percent(0.1234) == "12.3%"
