@@ -4,6 +4,7 @@ from app.presentation import describe_market_reason, format_money, format_percen
 def test_known_labels_are_translated_to_chinese():
     assert label_for("RISK_ON") == "风险偏好，可开新仓"
     assert label_for("ENTRY_CANDIDATE") == "入场候选"
+    assert label_for("WAIT_15M_TRIGGER") == "等待 15 分钟触发"
     assert label_for("BOTTOM_STRUCTURE") == "底结构"
     assert label_for("SCRIPT_A_BOTTOM_TREND_RESUME") == "剧本 A：底结构后的趋势恢复"
     assert label_for("60m") == "60 分钟"
@@ -21,6 +22,17 @@ def test_reason_formatter_translates_common_backend_phrases():
     assert "止损=123.45" in rendered
     assert "建议股数=100" in rendered
     assert "评分未参与触发" in rendered
+
+
+def test_reason_formatter_translates_structure_and_trigger_sources():
+    rendered = format_reason(
+        "structure_id=12; structure_timeframe=60m; structure_ts=2026-06-08T10:00:00; "
+        "trigger_timeframe=15m; trigger_ts=2026-06-08T11:15:00; trigger_price=102.50; trigger_level=101.80"
+    )
+    assert "结构编号=12" in rendered
+    assert "结构周期=60 分钟" in rendered
+    assert "触发周期=15 分钟" in rendered
+    assert "触发价=102.50" in rendered
 
 
 def test_number_formatters_are_human_readable():

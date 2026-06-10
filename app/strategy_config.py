@@ -13,4 +13,15 @@ class StructureConfig:
     script_version: str = "macd-structure-v1"
 
 
+@dataclass(frozen=True)
+class EntryTriggerConfig:
+    breakout_lookback_bars: int = 8
+    histogram_improvement_bars: int = 3
+    minimum_volume_ratio: float = 0.65
+    maximum_stop_distance_pct: float = 0.08
+    maximum_stop_distance_atr: float = 4.0
+    script_version: str = "macd-15m-trigger-v1"
+
+
 STRUCTURE_CONFIG = StructureConfig()
+ENTRY_TRIGGER_CONFIG = EntryTriggerConfig()
