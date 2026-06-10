@@ -56,8 +56,11 @@ REASON_REPLACEMENTS: tuple[tuple[str, str], ...] = (
     ("data anomaly freezes new signals", "数据异常，冻结新入场建议"),
     ("daily data missing", "日线行情缺失，无法评估趋势"),
     ("60m data missing", "60 分钟行情缺失，无法确认短周期状态"),
+    ("15m data missing", "15 分钟行情缺失，无法判断入场触发"),
+    ("5m data missing; core trading is not blocked", "5 分钟行情缺失，仅影响辅助展示，不阻塞核心交易链路"),
     ("daily data anomaly", "日线行情异常"),
     ("60m data anomaly", "60 分钟行情异常"),
+    ("15m data anomaly", "15 分钟行情异常"),
     ("repair market data, recompute indicators, then rerun pipeline", "重新更新行情、计算指标后，再刷新状态机"),
     ("data quality passed", "行情质量检查通过"),
     ("no bars returned from data source", "数据源未返回 K 线"),
@@ -66,6 +69,7 @@ REASON_REPLACEMENTS: tuple[tuple[str, str], ...] = (
     ("market indicators insufficient", "市场指标历史不足"),
     ("daily or 60m data missing", "日线或 60 分钟数据缺失"),
     ("indicator history insufficient", "指标历史不足"),
+    ("indicators missing at", "指标缺失，时间"),
     ("pending entry signal already exists", "已有待审批入场建议"),
     ("portfolio risk checks passed", "组合风险检查通过"),
     ("risk calculation failed or stop unavailable", "风控计算失败或止损位不清晰"),
@@ -146,6 +150,14 @@ def format_reason(text: Any, limit: int | None = None) -> str:
         r"60 分钟行情停留在 \1，落后于最新日线 \2",
         result,
     )
+    result = re.sub(
+        r"\b15m data stale at ([0-9-]+); latest daily bar is ([0-9-]+)\b",
+        r"15 分钟行情停留在 \1，落后于最新日线 \2",
+        result,
+    )
+    result = re.sub(r"\b15m indicators missing at\b", "15 分钟指标缺失，时间", result)
+    result = re.sub(r"\b60m indicators missing at\b", "60 分钟指标缺失，时间", result)
+    result = re.sub(r"\bdaily indicators missing at\b", "日线指标缺失，时间", result)
     result = re.sub(r"\bupdated ([0-9]+) bars; data quality passed\b", r"已更新 \1 根 K 线，质量检查通过", result)
     result = re.sub(
         r"\bupdated ([0-9]+) bars; ([0-9]+) anomalous bars isolated\b",

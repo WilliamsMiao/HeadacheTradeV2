@@ -3,7 +3,7 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.domain import DAILY, HOUR_60, Bar
+from app.domain import CORE_TIMEFRAMES, DISPLAY_TIMEFRAMES, Bar
 from app.models import KLine, WatchlistItem
 from app.providers.base import MarketDataProvider
 from app.services.data_quality import validate_bar
@@ -71,10 +71,12 @@ def update_market_data(
     symbols: list[str],
     start: datetime | None = None,
     end: datetime | None = None,
+    include_display_timeframes: bool = False,
 ) -> dict[str, str]:
     results: dict[str, str] = {}
+    timeframes = (*CORE_TIMEFRAMES, *DISPLAY_TIMEFRAMES) if include_display_timeframes else CORE_TIMEFRAMES
     for symbol in symbols:
-        for timeframe in (DAILY, HOUR_60):
+        for timeframe in timeframes:
             try:
                 bars = provider.get_klines(symbol, timeframe, start, end)
                 if not bars:
