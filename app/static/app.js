@@ -205,6 +205,7 @@ function renderOpenDStatus(payload) {
       <div><dt>Telnet 端口</dt><dd>${payload.telnet_port_open ? "开放" : "关闭"}</dd></div>
       <div><dt>登录配置</dt><dd>${payload.credentials_configured ? "已配置" : "未配置"}</dd></div>
       <div><dt>后端连接</dt><dd>${socketConnected ? "已连接" : "未连接"}</dd></div>
+      <div><dt>验证码状态</dt><dd>${payload.needs_phone_code ? "需要手机验证码" : (payload.needs_captcha_code ? "需要图形验证码" : "暂无提示")}</dd></div>
     </dl>
     <pre class="log-box">${escapeHtml(payload.telnet_reply || payload.recent_log || "暂无 OpenD 日志。")}</pre>
   `;

@@ -137,7 +137,9 @@ def status(message: str) -> dict:
 def status_fields() -> dict:
     active = run(["systemctl", "is-active", SERVICE], check=False).stdout.strip()
     enabled = run(["systemctl", "is-enabled", SERVICE], check=False).stdout.strip()
-    journal = run(["journalctl", "-u", f"{SERVICE}.service", "--since", "10 minutes ago", "--no-pager"], check=False).stdout
+    opend_journal = run(["journalctl", "-u", f"{SERVICE}.service", "--since", "10 minutes ago", "--no-pager"], check=False).stdout
+    app_journal = run(["journalctl", "-u", "headachetrade.service", "--since", "10 minutes ago", "--no-pager"], check=False).stdout
+    combined_journal = opend_journal + "\n" + app_journal
     return {
         "installed": OPEND_BIN.exists(),
         "service_active": active,
@@ -145,9 +147,9 @@ def status_fields() -> dict:
         "api_port_open": port_open(API_PORT),
         "telnet_port_open": port_open(TELNET_PORT),
         "credentials_configured": env_has_value("FUTU_LOGIN_ACCOUNT") and env_has_value("FUTU_LOGIN_PASSWORD"),
-        "needs_phone_code": "需要手机验证码" in journal,
-        "needs_captcha_code": "图形验证码" in journal,
-        "recent_log": tail(clean(journal), 3000),
+        "needs_phone_code": "需要手机验证码" in combined_journal,
+        "needs_captcha_code": "图形验证码" in combined_journal,
+        "recent_log": tail(clean(combined_journal), 3000),
     }
 
 

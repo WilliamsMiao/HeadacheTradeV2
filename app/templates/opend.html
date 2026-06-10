@@ -5,10 +5,10 @@
     <h1>Futu OpenD 管理</h1>
     <p>安装、配置和启动都通过服务器本机的受控运维助手执行；OpenD 只监听 127.0.0.1，不暴露到公网。</p>
   </div>
-  <section class="market-tile {{ 'market-risk-on' if status.socket_health.connected else 'market-risk-off' }}">
-    <span>后端连接</span>
-    <strong>{{ "已连接" if status.socket_health.connected else "未连接" }}</strong>
-    <small>{{ status.socket_health.host }}:{{ status.socket_health.port }}</small>
+  <section class="market-tile {{ 'market-risk-off' if status.needs_phone_code or status.needs_captcha_code or not status.socket_health.connected else 'market-risk-on' }}">
+    <span>OpenD 状态</span>
+    <strong>{% if status.needs_phone_code %}需要手机验证码{% elif status.needs_captcha_code %}需要图形验证码{% elif status.socket_health.connected %}端口已连接{% else %}端口未连接{% endif %}</strong>
+    <small>{{ status.socket_health.host }}:{{ status.socket_health.port }} · 端口连接不等于 Futu 已登录</small>
   </section>
 </header>
 
