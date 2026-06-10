@@ -37,23 +37,41 @@
 
 <section class="grid two">
   <div class="panel form-panel">
-    <div class="panel-head"><h2>OpenD 登录配置</h2><span>密码只写入服务器 env，不回显</span></div>
+    <div class="panel-head">
+      <div class="panel-head-copy">
+        <h2>登录配置</h2>
+        <span>凭据只写入服务器环境文件，不在页面回显。</span>
+      </div>
+    </div>
     <form id="opend-config-form">
       <label>Futu 登录账号<input name="login_account" autocomplete="username" required><small>例如手机号、邮箱或用户 ID。</small></label>
       <label>Futu 登录密码<input name="login_password" type="password" autocomplete="new-password" required><small>保存到 /etc/futu-opend/futu-opend.env。</small></label>
       <label>交易解锁密码（可选）<input name="trd_unlock_password" type="password" autocomplete="new-password"><small>仅在你需要 OpenD 解锁交易时填写。</small></label>
-      <button type="submit">保存 OpenD 配置</button>
+      <div class="form-actions">
+        <button type="submit" data-loading-text="正在保存">保存登录配置</button>
+        <span class="inline-feedback" data-form-feedback aria-live="polite"></span>
+      </div>
     </form>
   </div>
 
   <div class="panel form-panel">
-    <div class="panel-head"><h2>服务操作</h2><span>所有操作都需要登录态</span></div>
+    <div class="panel-head">
+      <div class="panel-head-copy">
+        <h2>服务控制</h2>
+        <span>安装和启动是常用操作，停止服务需要确认。</span>
+      </div>
+    </div>
     <div class="toolbar opend-actions">
-      <button data-opend-action="install">安装/修复</button>
-      <button data-opend-action="start">启动</button>
-      <button data-opend-action="restart">重启</button>
-      <button data-opend-action="stop" class="ghost">停止</button>
-      <button data-opend-refresh class="ghost">刷新状态</button>
+      <button data-opend-action="start" data-loading-text="正在启动">启动 OpenD</button>
+      <button data-opend-refresh data-loading-text="正在刷新" class="secondary">刷新状态</button>
+      <details class="action-menu">
+        <summary>维护操作</summary>
+        <div class="action-menu-content">
+          <button data-opend-action="install" data-loading-text="正在修复">安装或修复</button>
+          <button data-opend-action="restart" data-loading-text="正在重启">重启 OpenD</button>
+          <button data-opend-action="stop" data-loading-text="正在停止" data-confirm="停止 OpenD 后，行情同步和自选股读取将不可用。确认停止？" class="danger">停止 OpenD</button>
+        </div>
+      </details>
     </div>
     <p class="empty compact-note">如果频繁重启，Futu 可能刷新验证码。收到验证码后优先直接提交，不要反复重启 OpenD。</p>
   </div>
@@ -61,23 +79,44 @@
 
 <section class="grid two">
   <div class="panel form-panel">
-    <div class="panel-head"><h2>手机验证码</h2><span>OpenD Telnet 命令 input_phone_verify_code</span></div>
+    <div class="panel-head">
+      <div class="panel-head-copy">
+        <h2>手机验证码</h2>
+        <span>当状态提示需要手机验证码时，在这里提交最新验证码。</span>
+      </div>
+    </div>
     <form id="opend-phone-code-form">
       <label>手机验证码<input name="code" inputmode="numeric" autocomplete="one-time-code" required></label>
-      <button type="submit">提交手机验证码</button>
+      <div class="form-actions">
+        <button type="submit" data-loading-text="正在提交">提交手机验证码</button>
+        <span class="inline-feedback" data-form-feedback aria-live="polite"></span>
+      </div>
     </form>
   </div>
   <div class="panel form-panel">
-    <div class="panel-head"><h2>图形验证码</h2><span>OpenD Telnet 命令 input_pic_verify_code</span></div>
+    <div class="panel-head">
+      <div class="panel-head-copy">
+        <h2>图形验证码</h2>
+        <span>仅在 OpenD 明确要求图形验证码时使用。</span>
+      </div>
+    </div>
     <form id="opend-captcha-code-form">
       <label>图形验证码<input name="code" autocomplete="one-time-code" required></label>
-      <button type="submit">提交图形验证码</button>
+      <div class="form-actions">
+        <button type="submit" data-loading-text="正在提交">提交图形验证码</button>
+        <span class="inline-feedback" data-form-feedback aria-live="polite"></span>
+      </div>
     </form>
   </div>
 </section>
 
 <section class="panel">
-  <div class="panel-head"><h2>最近状态</h2><span id="opend-message">{{ message }}</span></div>
+  <div class="panel-head">
+    <div class="panel-head-copy">
+      <h2>运行诊断</h2>
+      <span id="opend-message">{{ message }}</span>
+    </div>
+  </div>
   <div class="opend-status" id="opend-status">
     <dl class="metric-grid">
       <div><dt>登录配置</dt><dd>{{ "已配置" if status.credentials_configured else "未配置" }}</dd></div>

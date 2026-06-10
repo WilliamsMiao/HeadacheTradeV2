@@ -28,7 +28,12 @@
       <p>{{ event.reason|reason }}</p>
       <small>后 5/10/20 根: {{ event.follow_5_return|return_pct }} · {{ event.follow_10_return|return_pct }} · {{ event.follow_20_return|return_pct }}</small>
     </article>
-    {% else %}<p class="empty">暂无结构事件。</p>{% endfor %}
+    {% else %}
+    <div class="empty">
+      <strong>暂无结构事件</strong>
+      <span>更新行情并运行状态机后，这里会记录底部与顶部结构历史。</span>
+    </div>
+    {% endfor %}
   </div>
   <div class="panel">
     <div class="panel-head"><h2>状态变化</h2><span>原因必须可复盘</span></div>
@@ -38,7 +43,12 @@
       <time>{{ log.created_at|dt }}</time>
       <p>{{ log.reason|reason }}</p>
     </article>
-    {% else %}<p class="empty">暂无状态变化。</p>{% endfor %}
+    {% else %}
+    <div class="empty">
+      <strong>暂无状态变化</strong>
+      <span>当趋势、结构或持仓条件改变时，状态转换和原因会记录在这里。</span>
+    </div>
+    {% endfor %}
   </div>
 </section>
 

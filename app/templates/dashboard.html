@@ -35,17 +35,31 @@
   </article>
 </section>
 
-<section class="toolbar" aria-label="数据任务">
-  <button data-task="sync-watchlist">同步自选股</button>
-  <button data-task="update-market-data">更新行情</button>
-  <button data-task="compute-indicators">计算指标</button>
-  <button data-task="run-pipeline">刷新状态机</button>
-</section>
-
 <section class="panel">
+  <div class="task-bar">
+    <div class="task-bar-copy">
+      <h2>数据任务</h2>
+      <small>按顺序完成数据同步、指标计算与状态刷新。</small>
+    </div>
+    <div class="task-bar-actions" aria-label="数据任务">
+      <button data-task="sync-watchlist" data-loading-text="正在同步">同步自选股</button>
+      <button class="secondary" data-task="update-market-data" data-loading-text="正在更新">更新行情</button>
+      <details class="action-menu">
+        <summary>更多任务</summary>
+        <div class="action-menu-content">
+          <button data-task="compute-indicators" data-loading-text="正在计算">计算指标</button>
+          <button data-task="run-pipeline" data-loading-text="正在刷新">刷新状态机</button>
+          <button data-task="run-backtest" data-loading-text="正在生成">生成复盘</button>
+        </div>
+      </details>
+    </div>
+  </div>
   <div class="panel-head">
-    <h2>主看板</h2>
-    <span>评分仅展示，不参与状态机</span>
+    <div class="panel-head-copy">
+      <h2>主看板</h2>
+      <span>评分仅用于排序展示，不参与状态转换或交易触发。</span>
+    </div>
+    <small>{{ summary.watchlist }} 只股票</small>
   </div>
   <div class="table-wrap">
     <table>
@@ -93,6 +107,15 @@
             <small>{{ row.state.next_wait|reason(56) if row.state else "等待趋势过滤" }}</small>
           </td>
         </tr>
+        {% else %}
+        <tr>
+          <td colspan="6">
+            <div class="empty">
+              <strong>尚未同步自选股</strong>
+              <span>先确认 OpenD 已登录，再使用上方“同步自选股”。</span>
+            </div>
+          </td>
+        </tr>
         {% endfor %}
       </tbody>
     </table>
@@ -121,11 +144,16 @@
         <div><dt>展示评分</dt><dd>{{ signal.score_display or "-" }}</dd></div>
       </dl>
       <footer>
-        <button data-approve="{{ signal.id }}">批准并创建模拟持仓</button>
-        <button data-reject="{{ signal.id }}" class="ghost">拒绝建议</button>
+        <button data-approve="{{ signal.id }}" data-loading-text="正在批准">批准建议</button>
+        <button data-reject="{{ signal.id }}" data-loading-text="正在拒绝" class="danger">拒绝建议</button>
       </footer>
     </article>
-    {% else %}<p class="empty">暂无待审批建议。</p>{% endfor %}
+    {% else %}
+    <div class="empty">
+      <strong>暂无待审批建议</strong>
+      <span>状态机生成满足趋势、结构和风控条件的候选后，会在这里等待人工确认。</span>
+    </div>
+    {% endfor %}
   </div>
 
   <div class="panel">
@@ -138,7 +166,12 @@
       <span>止损 {{ position.stop_price|price }}</span>
       <span>{{ "%.2f"|format(position.current_r) }}R</span>
     </article>
-    {% else %}<p class="empty">暂无模拟持仓。</p>{% endfor %}
+    {% else %}
+    <div class="empty">
+      <strong>暂无模拟持仓</strong>
+      <span>批准入场建议后，模拟持仓和止损信息会显示在这里。</span>
+    </div>
+    {% endfor %}
     <div class="stats">
       {% for stat in reviews %}
       <span>{{ stat.metric|label }}: {{ "%.2f"|format(stat.value) }}</span>

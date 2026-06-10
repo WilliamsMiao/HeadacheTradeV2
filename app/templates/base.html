@@ -7,24 +7,34 @@
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
-  <aside class="shell-nav">
+  <header class="mobile-header">
     <a class="brand" href="/">
       <span class="brand-mark">HT</span>
       <span>HeadacheTradeV2</span>
     </a>
-    <nav>
-      <a href="/">看板</a>
-      <a href="/risk">风控</a>
-      <a href="/opend">OpenD</a>
-      <button data-task="run-pipeline">运行状态机</button>
-      <button data-task="run-backtest">生成复盘</button>
-      <button data-logout>退出登录</button>
+    <button class="secondary mobile-menu-button" type="button" data-nav-toggle aria-label="打开导航" aria-expanded="false">菜单</button>
+  </header>
+  <aside class="shell-nav" id="primary-navigation">
+    <a class="brand" href="/">
+      <span class="brand-mark">HT</span>
+      <span>HeadacheTradeV2</span>
+    </a>
+    <nav aria-label="主导航">
+      <a href="/" {% if request.url.path == "/" %}aria-current="page"{% endif %}>看板</a>
+      <a href="/risk" {% if request.url.path == "/risk" %}aria-current="page"{% endif %}>风控设置</a>
+      <a href="/opend" {% if request.url.path == "/opend" %}aria-current="page"{% endif %}>OpenD 管理</a>
     </nav>
+    <div class="nav-footer">
+      <button data-logout>退出登录</button>
+    </div>
   </aside>
+  <button class="nav-scrim" type="button" data-nav-close aria-label="关闭导航"></button>
   <main class="shell-main">
-    {% block content %}{% endblock %}
+    <div class="content-shell">
+      {% block content %}{% endblock %}
+    </div>
   </main>
-  <div id="toast" class="toast" hidden></div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   <script src="/static/app.js"></script>
 </body>
 </html>

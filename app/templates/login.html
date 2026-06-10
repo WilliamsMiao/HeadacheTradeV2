@@ -13,7 +13,10 @@
     <p>请输入系统访问密码。当前使用公网 IP HTTP 访问，请避免在不可信网络中操作。</p>
     <form id="login-form">
       <label>访问密码<input name="password" type="password" autocomplete="current-password" required autofocus></label>
-      <button type="submit">进入系统</button>
+      <div class="form-actions">
+        <button type="submit" data-loading-text="正在验证">进入系统</button>
+        <span class="inline-feedback" data-form-feedback aria-live="polite"></span>
+      </div>
     </form>
   </main>
   <div id="toast" class="toast" hidden></div>

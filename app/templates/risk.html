@@ -8,6 +8,12 @@
 </header>
 
 <section class="panel form-panel">
+  <div class="panel-head">
+    <div class="panel-head-copy">
+      <h2>组合风险参数</h2>
+      <span>保存后用于后续建议计算，不会自动修改已有模拟持仓。</span>
+    </div>
+  </div>
   <form id="risk-form">
     <fieldset>
       <legend>账户风险</legend>
@@ -29,7 +35,10 @@
       <legend>冷却机制</legend>
       <label>冷却天数<input name="cooldown_days" type="number" step="1" value="{{ config.cooldown_days }}"><small>硬止损或结构失败后暂停新开仓。</small></label>
     </fieldset>
-    <button type="submit">保存风控参数</button>
+    <div class="form-actions">
+      <button type="submit" data-loading-text="正在保存">保存风控参数</button>
+      <span class="inline-feedback" data-form-feedback aria-live="polite"></span>
+    </div>
   </form>
 </section>
 {% endblock %}
