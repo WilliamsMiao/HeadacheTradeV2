@@ -77,9 +77,16 @@ def _signal_exists(session: Session, symbol: str, signal_type: str) -> bool:
     )
 
 
-def advance_state_machine(session: Session, symbol: str, market_state: str, stock_trend: str) -> TradingState:
+def advance_state_machine(
+    session: Session,
+    symbol: str,
+    market_state: str,
+    stock_trend: str,
+    *,
+    as_of_date: date | None = None,
+) -> TradingState:
     record = get_or_create_trading_state(session, symbol)
-    today = date.today()
+    today = as_of_date or date.today()
     correction = reconcile_pending_entry(session, symbol, market_state)
     if correction:
         if correction.start_cooldown:

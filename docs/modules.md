@@ -56,3 +56,7 @@ ENTRY 建议持久化结构编号、15m 触发时间/参考价、每股风险、
 - 市场降级至不可开仓状态：`CANCELLED_BY_MARKET`。
 
 取消只改变建议状态并记录 `cancel_reason`，不会删除原记录，也不会执行实盘订单。持仓期间市场降级会进入风险保护；若同时跌破 60m MA60，只生成待人工审批的退出候选。
+
+## 时间步进回测
+
+`app.services.backtest` 将原始 K 线逐步暴露到隔离数据库，并复用市场、趋势、结构、状态机、纠错、风控和审批模块。回测结果写入 `BacktestTrade`，系统统计写入 `ReviewStat`；实时 `TradeSignal` 和 `Position` 不会被回测污染。
