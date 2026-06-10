@@ -1,10 +1,11 @@
 from fastapi.testclient import TestClient
 from sqlalchemy import delete
+from datetime import date, datetime
 
 from app.db import init_db
 from app.db import SessionLocal
-from app.main import app
-from app.models import SystemConfig
+from app.main import _dashboard_context, app
+from app.models import MarketState, SystemConfig
 
 
 def authenticated_client() -> TestClient:
@@ -79,3 +80,25 @@ def test_opend_page_requires_auth_then_renders(monkeypatch):
     assert response.status_code == 200
     assert "Futu OpenD 管理" in response.text
     assert "手机验证码" in response.text
+
+
+def test_dashboard_uses_most_recently_computed_market_state(session):
+    session.add_all(
+        [
+            MarketState(
+                as_of=date(2026, 6, 10),
+                state="RISK_OFF",
+                reason="SPY market data or indicators missing",
+                updated_at=datetime(2026, 6, 10, 9, 0),
+            ),
+            MarketState(
+                as_of=date(2026, 6, 9),
+                state="RISK_ON",
+                reason="SPY: close > MA60; QQQ: close > MA60",
+                updated_at=datetime(2026, 6, 10, 10, 0),
+            ),
+        ]
+    )
+    session.commit()
+
+    assert _dashboard_context(session)["market"].state == "RISK_ON"

@@ -346,7 +346,7 @@ def _opend_payload(result: opend_admin.AdminResult) -> dict[str, object]:
 
 def _dashboard_context(session: Session) -> dict[str, object]:
     settings = get_settings()
-    market = session.scalar(select(MarketState).order_by(MarketState.as_of.desc()).limit(1))
+    market = session.scalar(select(MarketState).order_by(MarketState.updated_at.desc()).limit(1))
     market_checks = market_diagnostics(session, settings.market_symbols)
     items = list(session.scalars(select(WatchlistItem).where(WatchlistItem.active.is_(True)).order_by(WatchlistItem.symbol)))
     rows = []
