@@ -1,11 +1,11 @@
 from fastapi.testclient import TestClient
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from datetime import date, datetime
 
 from app.db import init_db
 from app.db import SessionLocal
 from app.main import _dashboard_context, app
-from app.models import MarketState, SystemConfig, TradeSignal
+from app.models import MarketState, SystemConfig, TradeSignal, WatchlistItem
 
 
 def authenticated_client() -> TestClient:
@@ -143,3 +143,37 @@ def test_dashboard_renders_entry_risk_and_source_details():
     assert "每股风险" in response.text
     assert "允许亏损" in response.text
     assert "建议市值" in response.text
+
+
+def test_symbol_detail_renders_cancelled_signal_reason():
+    client = authenticated_client()
+    with SessionLocal() as session:
+        session.execute(delete(TradeSignal))
+        item = session.scalar(select(WatchlistItem).where(WatchlistItem.symbol == "AAPL"))
+        if item is None:
+            session.add(WatchlistItem(symbol="AAPL", name="Apple", active=True))
+        session.add(
+            TradeSignal(
+                symbol="AAPL",
+                signal_type="ENTRY",
+                status="CANCELLED_BY_TRIGGER",
+                action="入场候选",
+                source_structure_id=12,
+                trigger_timeframe="15m",
+                trigger_ts=datetime(2026, 6, 8, 11, 15),
+                trigger_level=101.8,
+                reason="original entry",
+                cancel_reason="15 分钟触发后跌回触发位下方",
+            )
+        )
+        session.commit()
+
+    response = client.get("/symbols/AAPL")
+    with SessionLocal() as session:
+        session.execute(delete(TradeSignal))
+        session.commit()
+
+    assert response.status_code == 200
+    assert "建议与纠错历史" in response.text
+    assert "因触发失败取消" in response.text
+    assert "15 分钟触发后跌回触发位下方" in response.text

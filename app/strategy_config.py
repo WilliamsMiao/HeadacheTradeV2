@@ -23,5 +23,13 @@ class EntryTriggerConfig:
     script_version: str = "macd-15m-trigger-v1"
 
 
+@dataclass(frozen=True)
+class CorrectionConfig:
+    signal_expiry_bars: int = 4
+    trigger_failure_bars: int = 5
+    maximum_entry_deviation_pct: float = 0.03
+
+
 STRUCTURE_CONFIG = StructureConfig()
 ENTRY_TRIGGER_CONFIG = EntryTriggerConfig()
+CORRECTION_CONFIG = CorrectionConfig()

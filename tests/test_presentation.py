@@ -8,6 +8,7 @@ def test_known_labels_are_translated_to_chinese():
     assert label_for("BOTTOM_STRUCTURE") == "底结构"
     assert label_for("SCRIPT_A_BOTTOM_TREND_RESUME") == "剧本 A：底结构后的趋势恢复"
     assert label_for("60m") == "60 分钟"
+    assert label_for("CANCELLED_BY_TRIGGER") == "因触发失败取消"
 
 
 def test_unknown_label_falls_back_safely():

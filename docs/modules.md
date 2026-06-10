@@ -45,3 +45,14 @@
 剧本 A 的初始止损由 `app.services.risk.calculate_structure_stop` 计算：`60m BOTTOM_STRUCTURE.pivot_low - 0.5 × 结构时点 60m ATR`。缺少结构低点、结构时点 ATR 或有效触发来源时，不允许生成入场建议。
 
 ENTRY 建议持久化结构编号、15m 触发时间/参考价、每股风险、允许亏损、实际风险、建议市值和规则版本。仓位继续按允许亏损反推，评分不参与仓位计算。
+
+## 纠错机制
+
+`app.services.corrections` 在状态机推进和人工审批前检查未审批 ENTRY：
+
+- 来源底结构失败：`CANCELLED_BY_STRUCTURE` 并进入冷却；
+- 触发后 5 根 15m K 内跌回触发位、MA20 下方或 MACD 柱转弱：`CANCELLED_BY_TRIGGER`；
+- 超过 4 根 15m K 仍未审批：`EXPIRED`；
+- 市场降级至不可开仓状态：`CANCELLED_BY_MARKET`。
+
+取消只改变建议状态并记录 `cancel_reason`，不会删除原记录，也不会执行实盘订单。持仓期间市场降级会进入风险保护；若同时跌破 60m MA60，只生成待人工审批的退出候选。
