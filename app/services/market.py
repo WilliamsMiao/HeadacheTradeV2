@@ -15,6 +15,22 @@ class MarketEvaluation:
     reason: str
 
 
+@dataclass(frozen=True)
+class MarketSymbolDiagnostic:
+    symbol: str
+    ready: bool
+    passed: bool
+    as_of: date | None
+    close: float | None
+    ma20: float | None
+    ma60: float | None
+    macd_dif: float | None
+    above_ma60: bool | None
+    ma_bullish: bool | None
+    momentum_ok: bool | None
+    reason: str
+
+
 def _latest_joined(session: Session, symbol: str) -> tuple[KLine, Indicator] | None:
     kline = session.scalar(
         select(KLine)
@@ -32,28 +48,85 @@ def _latest_joined(session: Session, symbol: str) -> tuple[KLine, Indicator] | N
     return kline, indicator
 
 
-def evaluate_market(session: Session, symbols: list[str]) -> MarketEvaluation:
-    checks = []
-    reasons = []
-    latest_dates: list[date] = []
+def market_diagnostics(session: Session, symbols: list[str]) -> list[MarketSymbolDiagnostic]:
+    diagnostics = []
     for symbol in symbols:
         joined = _latest_joined(session, symbol)
         if joined is None:
-            return MarketEvaluation(date.today(), "RISK_OFF", f"{symbol} market data or indicators missing")
+            diagnostics.append(
+                MarketSymbolDiagnostic(
+                    symbol=symbol,
+                    ready=False,
+                    passed=False,
+                    as_of=None,
+                    close=None,
+                    ma20=None,
+                    ma60=None,
+                    macd_dif=None,
+                    above_ma60=None,
+                    ma_bullish=None,
+                    momentum_ok=None,
+                    reason=f"{symbol} market data or indicators missing",
+                )
+            )
+            continue
         kline, indicator = joined
-        latest_dates.append(kline.ts.date())
         if indicator.ma60 is None or indicator.ma20 is None or indicator.macd_dif is None:
-            return MarketEvaluation(kline.ts.date(), "RISK_OFF", f"{symbol} market indicators insufficient")
+            diagnostics.append(
+                MarketSymbolDiagnostic(
+                    symbol=symbol,
+                    ready=False,
+                    passed=False,
+                    as_of=kline.ts.date(),
+                    close=kline.close,
+                    ma20=indicator.ma20,
+                    ma60=indicator.ma60,
+                    macd_dif=indicator.macd_dif,
+                    above_ma60=None,
+                    ma_bullish=None,
+                    momentum_ok=None,
+                    reason=f"{symbol} market indicators insufficient",
+                )
+            )
+            continue
         above_ma60 = kline.close > indicator.ma60
         ma_bullish = indicator.ma20 >= indicator.ma60
-        macd_ok = indicator.macd_dif >= 0 or kline.close >= indicator.ma20
-        checks.append(above_ma60 and ma_bullish and macd_ok)
-        reasons.append(
-            f"{symbol}: close {'>' if above_ma60 else '<='} MA60, MA20 {'>=' if ma_bullish else '<'} MA60, MACD {'ok' if macd_ok else 'weak'}"
+        momentum_ok = indicator.macd_dif >= 0 or kline.close >= indicator.ma20
+        passed = above_ma60 and ma_bullish and momentum_ok
+        diagnostics.append(
+            MarketSymbolDiagnostic(
+                symbol=symbol,
+                ready=True,
+                passed=passed,
+                as_of=kline.ts.date(),
+                close=kline.close,
+                ma20=indicator.ma20,
+                ma60=indicator.ma60,
+                macd_dif=indicator.macd_dif,
+                above_ma60=above_ma60,
+                ma_bullish=ma_bullish,
+                momentum_ok=momentum_ok,
+                reason=(
+                    f"{symbol}: close {'>' if above_ma60 else '<='} MA60, "
+                    f"MA20 {'>=' if ma_bullish else '<'} MA60, "
+                    f"MACD {'ok' if momentum_ok else 'weak'}"
+                ),
+            )
         )
-    strong_count = sum(1 for item in checks if item)
+    return diagnostics
+
+
+def evaluate_market(session: Session, symbols: list[str]) -> MarketEvaluation:
+    diagnostics = market_diagnostics(session, symbols)
+    ready = [item for item in diagnostics if item.ready]
+    latest_dates = [item.as_of for item in diagnostics if item.as_of is not None]
     as_of = max(latest_dates) if latest_dates else date.today()
-    if strong_count == len(checks):
+    reasons = [item.reason for item in diagnostics]
+    if len(ready) != len(symbols):
+        return MarketEvaluation(as_of, "RISK_OFF", "; ".join(reasons))
+
+    strong_count = sum(1 for item in ready if item.passed)
+    if strong_count == len(ready):
         state = "RISK_ON"
     elif strong_count >= 1:
         state = "NEUTRAL_POSITIVE"
@@ -72,4 +145,3 @@ def persist_market_state(session: Session, evaluation: MarketEvaluation) -> Mark
         record.reason = evaluation.reason
     session.commit()
     return record
-

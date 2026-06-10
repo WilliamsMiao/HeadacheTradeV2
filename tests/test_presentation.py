@@ -1,4 +1,4 @@
-from app.presentation import format_money, format_percent, format_reason, format_shares, label_for
+from app.presentation import describe_market_reason, format_money, format_percent, format_reason, format_shares, label_for
 
 
 def test_known_labels_are_translated_to_chinese():
@@ -27,3 +27,8 @@ def test_number_formatters_are_human_readable():
     assert format_percent(0.1234) == "12.3%"
     assert format_shares(1200) == "1,200 股"
 
+
+def test_market_data_failure_is_not_described_as_confirmed_market_weakness():
+    description = describe_market_reason("RISK_OFF", "SPY market data or indicators missing")
+    assert "数据或指标不完整" in description
+    assert "不代表市场已经确认转弱" in description

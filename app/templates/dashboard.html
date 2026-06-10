@@ -8,9 +8,63 @@
   <section class="market-tile {{ market.state|css_class if market else 'market-risk-off' }}">
     <span>市场环境</span>
     <strong>{{ market.state|label if market else "未计算" }}</strong>
-    <small>{{ market.state|market_desc if market else "接入 Futu OpenD 并运行闭环后生成市场状态" }}</small>
+    <small>
+      {{ market.state|market_reason_desc(market.reason) if market else "接入 Futu OpenD 并运行闭环后生成市场状态" }}
+    </small>
   </section>
 </header>
+
+{% if market %}
+<details class="market-detail-panel" {% if market.state == "RISK_OFF" %}open{% endif %}>
+  <summary>
+    <span>
+      <strong>为什么是“{{ market.state|label }}”</strong>
+      <small>基于 SPY + QQQ 的长期趋势与动能过滤，数据日期 {{ market.as_of|dt }}</small>
+    </span>
+    <span class="detail-toggle">查看判定明细</span>
+  </summary>
+  <div class="market-detail-body">
+    <p class="market-conclusion">{{ market.state|market_reason_desc(market.reason) }}</p>
+    <div class="market-check-grid">
+      {% for check in market_checks %}
+      <article class="market-check">
+        <header>
+          <strong>{{ check.symbol }}</strong>
+          <span class="state {{ 'state-success' if check.passed else ('state-warning' if not check.ready else 'state-danger') }}">
+            {{ "通过过滤" if check.passed else ("数据不完整" if not check.ready else "未通过过滤") }}
+          </span>
+        </header>
+        {% if check.ready %}
+        <dl>
+          <div><dt>收盘价</dt><dd>{{ check.close|price }}</dd></div>
+          <div><dt>MA20</dt><dd>{{ check.ma20|price }}</dd></div>
+          <div><dt>MA60</dt><dd>{{ check.ma60|price }}</dd></div>
+          <div><dt>MACD DIF</dt><dd>{{ "%.3f"|format(check.macd_dif) }}</dd></div>
+        </dl>
+        <ul class="condition-list">
+          <li class="{{ 'passed' if check.above_ma60 else 'failed' }}">
+            {{ "通过" if check.above_ma60 else "未通过" }}：收盘价高于 MA60
+          </li>
+          <li class="{{ 'passed' if check.ma_bullish else 'failed' }}">
+            {{ "通过" if check.ma_bullish else "未通过" }}：MA20 不低于 MA60
+          </li>
+          <li class="{{ 'passed' if check.momentum_ok else 'failed' }}">
+            {{ "通过" if check.momentum_ok else "未通过" }}：MACD 非弱势或价格守住 MA20
+          </li>
+        </ul>
+        {% else %}
+        <p class="data-issue">{{ check.reason|reason }}</p>
+        <small>请先更新行情并计算指标，再刷新状态机。</small>
+        {% endif %}
+      </article>
+      {% endfor %}
+    </div>
+    <p class="market-rule">
+      判定规则：两个基准均通过为“风险偏好”；任一通过为“中性偏强”；两个均未通过或任一数据不完整时，关闭新开仓。
+    </p>
+  </div>
+</details>
+{% endif %}
 
 <section class="summary-grid">
   <article class="summary-card">
@@ -81,7 +135,9 @@
             <small>{{ row.item.name }}</small>
           </td>
           <td>
-            <span class="state state-soft">{{ row.trend.trend|label if row.trend else "数据不足" }}</span>
+            <span class="state {{ 'state-warning' if not row.data_ok else 'state-soft' }}">
+              {{ row.trend.trend|label if row.data_ok and row.trend else ("数据待修复" if not row.data_ok else "数据不足") }}
+            </span>
             <span class="state">{{ row.state.state|label if row.state else "空闲观察" }}</span>
           </td>
           <td>
@@ -102,9 +158,11 @@
           </td>
           <td>
             <p class="reason-short" title="{{ (row.signal.reason if row.signal else (row.state.last_reason if row.state else ''))|reason }}">
-              {{ (row.signal.reason if row.signal else (row.state.last_reason if row.state else "等待趋势过滤"))|reason(72) }}
+              {{ (row.data_reason if not row.data_ok else (row.signal.reason if row.signal else (row.state.last_reason if row.state else "等待趋势过滤")))|reason(72) }}
             </p>
-            <small>{{ row.state.next_wait|reason(56) if row.state else "等待趋势过滤" }}</small>
+            <small>
+              {{ "更新行情 → 计算指标 → 刷新状态机" if not row.data_ok else (row.state.next_wait|reason(56) if row.state else "等待趋势过滤") }}
+            </small>
           </td>
         </tr>
         {% else %}

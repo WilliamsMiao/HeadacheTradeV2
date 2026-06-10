@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.domain import DAILY, HOUR_60, Bar
 from app.models import KLine, WatchlistItem
 from app.providers.base import MarketDataProvider
-from app.services.data_quality import validate_bars
+from app.services.data_quality import validate_bar
 
 
 def sync_watchlist(session: Session, provider: MarketDataProvider) -> int:
@@ -40,9 +40,11 @@ def active_symbols(session: Session, include_market: list[str] | None = None) ->
     return symbols
 
 
-def upsert_bars(session: Session, bars: list[Bar], data_ok: bool, reason: str = "") -> int:
+def upsert_bars(session: Session, bars: list[Bar]) -> tuple[int, int]:
     count = 0
-    for bar in bars:
+    anomaly_count = 0
+    for bar in sorted(bars, key=lambda item: item.ts):
+        data_ok, reason = validate_bar(bar)
         record = session.scalar(
             select(KLine).where(KLine.symbol == bar.symbol, KLine.timeframe == bar.timeframe, KLine.ts == bar.ts)
         )
@@ -56,10 +58,11 @@ def upsert_bars(session: Session, bars: list[Bar], data_ok: bool, reason: str = 
             record.close = bar.close
             record.volume = bar.volume
         record.data_ok = data_ok
-        record.anomaly_reason = reason
+        record.anomaly_reason = "" if data_ok else reason
         count += 1
+        anomaly_count += int(not data_ok)
     session.commit()
-    return count
+    return count, anomaly_count
 
 
 def update_market_data(
@@ -74,9 +77,14 @@ def update_market_data(
         for timeframe in (DAILY, HOUR_60):
             try:
                 bars = provider.get_klines(symbol, timeframe, start, end)
-                ok, reason = validate_bars(bars)
-                upsert_bars(session, bars, ok, "" if ok else reason)
-                results[f"{symbol}:{timeframe}"] = reason
+                if not bars:
+                    results[f"{symbol}:{timeframe}"] = "no bars returned from data source"
+                    continue
+                count, anomaly_count = upsert_bars(session, bars)
+                if anomaly_count:
+                    results[f"{symbol}:{timeframe}"] = f"updated {count} bars; {anomaly_count} anomalous bars isolated"
+                else:
+                    results[f"{symbol}:{timeframe}"] = f"updated {count} bars; data quality passed"
             except Exception as exc:
                 results[f"{symbol}:{timeframe}"] = f"data source failed: {exc}"
     return results

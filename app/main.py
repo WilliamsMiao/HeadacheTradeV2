@@ -39,10 +39,13 @@ from app.models import (
 from app.services.approvals import approve_signal, reject_signal
 from app.services.backtest import run_backtest
 from app.services.pipeline import run_compute_indicators, run_full_refresh, run_pipeline, run_sync_watchlist, run_update_market_data
+from app.services.pipeline import symbol_data_status
+from app.services.market import market_diagnostics
 from app.services import opend_admin
 from app.services.risk import get_or_create_risk_config
 from app.presentation import (
     describe_market_state,
+    describe_market_reason,
     describe_script,
     format_datetime,
     format_money,
@@ -56,9 +59,14 @@ from app.presentation import (
 )
 
 BASE_DIR = Path(__file__).resolve().parent
+STATIC_VERSION = str(
+    max((BASE_DIR / "static" / "styles.css").stat().st_mtime_ns, (BASE_DIR / "static" / "app.js").stat().st_mtime_ns)
+)
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+templates.env.globals["static_version"] = STATIC_VERSION
 templates.env.filters["label"] = label_for
 templates.env.filters["market_desc"] = describe_market_state
+templates.env.filters["market_reason_desc"] = describe_market_reason
 templates.env.filters["script_desc"] = describe_script
 templates.env.filters["reason"] = format_reason
 templates.env.filters["money"] = format_money
@@ -337,7 +345,9 @@ def _opend_payload(result: opend_admin.AdminResult) -> dict[str, object]:
 
 
 def _dashboard_context(session: Session) -> dict[str, object]:
+    settings = get_settings()
     market = session.scalar(select(MarketState).order_by(MarketState.as_of.desc()).limit(1))
+    market_checks = market_diagnostics(session, settings.market_symbols)
     items = list(session.scalars(select(WatchlistItem).where(WatchlistItem.active.is_(True)).order_by(WatchlistItem.symbol)))
     rows = []
     for item in items:
@@ -346,7 +356,19 @@ def _dashboard_context(session: Session) -> dict[str, object]:
         structure = session.scalar(select(StructureEvent).where(StructureEvent.symbol == item.symbol).order_by(StructureEvent.event_ts.desc()).limit(1))
         signal = session.scalar(select(TradeSignal).where(TradeSignal.symbol == item.symbol, TradeSignal.status == "PENDING").order_by(TradeSignal.created_at.desc()).limit(1))
         position = session.scalar(select(Position).where(Position.symbol == item.symbol, Position.status == "OPEN"))
-        rows.append({"item": item, "trend": trend, "state": state, "structure": structure, "signal": signal, "position": position})
+        data_ok, data_reason = symbol_data_status(session, item.symbol)
+        rows.append(
+            {
+                "item": item,
+                "trend": trend,
+                "state": state,
+                "structure": structure,
+                "signal": signal,
+                "position": position,
+                "data_ok": data_ok,
+                "data_reason": data_reason,
+            }
+        )
     signals = list(session.scalars(select(TradeSignal).where(TradeSignal.status == "PENDING").order_by(TradeSignal.created_at.desc()).limit(30)))
     positions = list(session.scalars(select(Position).where(Position.status == "OPEN").order_by(Position.created_at.desc())))
     reviews = list(session.scalars(select(ReviewStat).order_by(ReviewStat.created_at.desc()).limit(20)))
@@ -363,4 +385,13 @@ def _dashboard_context(session: Session) -> dict[str, object]:
         "risk_items": len(risk_rows),
         "watchlist": len(rows),
     }
-    return {"market": market, "rows": rows, "signals": signals, "positions": positions, "reviews": reviews, "approvals": approvals, "summary": summary}
+    return {
+        "market": market,
+        "market_checks": market_checks,
+        "rows": rows,
+        "signals": signals,
+        "positions": positions,
+        "reviews": reviews,
+        "approvals": approvals,
+        "summary": summary,
+    }

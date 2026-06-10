@@ -22,16 +22,40 @@ def get_provider(settings: Settings, use_mock: bool = False):
 
 
 def run_sync_watchlist(session: Session, settings: Settings, use_mock: bool = False) -> int:
-    return sync_watchlist(session, get_provider(settings, use_mock))
-
-
-def run_update_market_data(session: Session, settings: Settings, use_mock: bool = False) -> dict[str, str]:
     provider = get_provider(settings, use_mock)
-    symbols = active_symbols(session, include_market=settings.market_symbols)
-    if not symbols:
-        sync_watchlist(session, provider)
-        symbols = active_symbols(session, include_market=settings.market_symbols)
-    return update_market_data(session, provider, symbols)
+    try:
+        return sync_watchlist(session, provider)
+    finally:
+        close = getattr(provider, "close", None)
+        if close:
+            close()
+
+
+def run_update_market_data(session: Session, settings: Settings, use_mock: bool = False) -> dict[str, object]:
+    provider = get_provider(settings, use_mock)
+    try:
+        symbols = list(dict.fromkeys([*settings.market_symbols, *active_symbols(session)]))
+        if not symbols:
+            sync_watchlist(session, provider)
+            symbols = list(dict.fromkeys([*settings.market_symbols, *active_symbols(session)]))
+        details = update_market_data(session, provider, symbols)
+        failures = {
+            key: value
+            for key, value in details.items()
+            if value.startswith("data source failed:") or value == "no bars returned from data source"
+        }
+        anomalous = {key: value for key, value in details.items() if "anomalous bars isolated" in value}
+        return {
+            "updated": len(details) - len(failures),
+            "failed": len(failures),
+            "anomalous": len(anomalous),
+            "failures": failures,
+            "details": details,
+        }
+    finally:
+        close = getattr(provider, "close", None)
+        if close:
+            close()
 
 
 def run_compute_indicators(session: Session, settings: Settings) -> int:
@@ -49,10 +73,11 @@ def run_pipeline(session: Session, settings: Settings) -> dict[str, int | str]:
     counts = {"structures": 0, "states": 0, "signals": 0, "market_state": market_eval.state}
     symbols = [symbol for symbol in active_symbols(session) if symbol not in settings.market_symbols]
     for symbol in symbols:
-        data_ok = _symbol_data_ok(session, symbol)
+        data_ok, data_reason = symbol_data_status(session, symbol)
         if not data_ok:
             state = advance_state_machine(session, symbol, "RISK_OFF", "UNKNOWN")
-            state.last_reason = "data anomaly freezes new signals"
+            state.last_reason = data_reason
+            state.next_wait = "repair market data, recompute indicators, then rerun pipeline"
             session.commit()
             counts["states"] += 1
             continue
@@ -76,7 +101,7 @@ def run_full_refresh(session: Session, settings: Settings, use_mock: bool = Fals
     return {"watchlist": watchlist, "market_data": market_data, "indicators": indicators, "pipeline": pipeline}
 
 
-def _symbol_data_ok(session: Session, symbol: str) -> bool:
+def symbol_data_status(session: Session, symbol: str) -> tuple[bool, str]:
     for timeframe in (DAILY, HOUR_60):
         bar = session.scalar(
             select(KLine)
@@ -84,9 +109,21 @@ def _symbol_data_ok(session: Session, symbol: str) -> bool:
             .order_by(KLine.ts.desc())
             .limit(1)
         )
-        if bar is None or not bar.data_ok:
-            return False
-    return True
+        timeframe_label = "daily" if timeframe == DAILY else "60m"
+        if bar is None:
+            return False, f"{timeframe_label} data missing"
+        if not bar.data_ok:
+            return False, bar.anomaly_reason or f"{timeframe_label} data anomaly"
+
+    daily_bar = session.scalar(
+        select(KLine).where(KLine.symbol == symbol, KLine.timeframe == DAILY).order_by(KLine.ts.desc()).limit(1)
+    )
+    hour_bar = session.scalar(
+        select(KLine).where(KLine.symbol == symbol, KLine.timeframe == HOUR_60).order_by(KLine.ts.desc()).limit(1)
+    )
+    if daily_bar and hour_bar and (daily_bar.ts.date() - hour_bar.ts.date()).days > 7:
+        return False, f"60m data stale at {hour_bar.ts:%Y-%m-%d}; latest daily bar is {daily_bar.ts:%Y-%m-%d}"
+    return True, "data quality passed"
 
 
 def _pending_signal_count(session: Session) -> int:

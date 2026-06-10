@@ -54,6 +54,13 @@ LABELS: dict[str, str] = {
 REASON_REPLACEMENTS: tuple[tuple[str, str], ...] = (
     ("market and stock trend passed, no structure opportunity", "市场与个股趋势通过，暂未出现结构机会"),
     ("data anomaly freezes new signals", "数据异常，冻结新入场建议"),
+    ("daily data missing", "日线行情缺失，无法评估趋势"),
+    ("60m data missing", "60 分钟行情缺失，无法确认短周期状态"),
+    ("daily data anomaly", "日线行情异常"),
+    ("60m data anomaly", "60 分钟行情异常"),
+    ("repair market data, recompute indicators, then rerun pipeline", "重新更新行情、计算指标后，再刷新状态机"),
+    ("data quality passed", "行情质量检查通过"),
+    ("no bars returned from data source", "数据源未返回 K 线"),
     ("data missing or indicators unavailable", "行情或指标缺失"),
     ("market data or indicators missing", "市场行情或指标缺失"),
     ("market indicators insufficient", "市场指标历史不足"),
@@ -110,6 +117,15 @@ def describe_market_state(value: Any) -> str:
     return descriptions.get(str(value), "市场状态尚未计算。")
 
 
+def describe_market_reason(state: Any, reason: Any) -> str:
+    raw_reason = str(reason or "")
+    if "missing" in raw_reason or "insufficient" in raw_reason:
+        return "市场基准数据或指标不完整，系统已保护性关闭新开仓。这不代表市场已经确认转弱。"
+    if str(state) == "RISK_OFF":
+        return "SPY 与 QQQ 均未通过长期趋势和动能过滤，因此暂停生成新开仓建议。"
+    return describe_market_state(state)
+
+
 def describe_script(value: Any) -> str:
     return label_for(value)
 
@@ -125,6 +141,20 @@ def format_reason(text: Any, limit: int | None = None) -> str:
     result = result.replace("UPTREND", label_for("UPTREND"))
     result = result.replace("STRONG_上涨趋势", label_for("STRONG_UPTREND"))
     result = result.replace("STRONG_UPTREND", label_for("STRONG_UPTREND"))
+    result = re.sub(
+        r"\b60m data stale at ([0-9-]+); latest daily bar is ([0-9-]+)\b",
+        r"60 分钟行情停留在 \1，落后于最新日线 \2",
+        result,
+    )
+    result = re.sub(r"\bupdated ([0-9]+) bars; data quality passed\b", r"已更新 \1 根 K 线，质量检查通过", result)
+    result = re.sub(
+        r"\bupdated ([0-9]+) bars; ([0-9]+) anomalous bars isolated\b",
+        r"已更新 \1 根 K 线，其中 \2 根异常数据已单独隔离",
+        result,
+    )
+    result = re.sub(r"\bhas zero volume at ([0-9-]+ [0-9:]+)\b", r"在 \1 成交量为零", result)
+    result = re.sub(r"\blow is inconsistent at ([0-9-]+ [0-9:]+)\b", r"在 \1 最低价字段不一致", result)
+    result = re.sub(r"\bhigh is inconsistent at ([0-9-]+ [0-9:]+)\b", r"在 \1 最高价字段不一致", result)
     result = re.sub(r"\bstop=([0-9.]+)", r"止损=\1", result)
     result = re.sub(r"\bshares=([0-9]+)", r"建议股数=\1", result)
     result = result.replace("; ", "；")
