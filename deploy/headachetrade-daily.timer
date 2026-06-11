@@ -9,4 +9,3 @@ Unit=headachetrade-daily.service
 
 [Install]
 WantedBy=timers.target
-

@@ -15,4 +15,3 @@ Unit=headachetrade-60m.service
 
 [Install]
 WantedBy=timers.target
-
