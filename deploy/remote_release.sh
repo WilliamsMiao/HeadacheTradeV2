@@ -84,7 +84,12 @@ PY
   fi
 fi
 
-sudo -E -u "${APP_USER}" uv run python -m app.cli init-db
+mkdir -p "${RELEASE_DIR}/.uv-cache"
+chown "${APP_USER}:${APP_USER}" "${RELEASE_DIR}/.uv-cache"
+sudo -u "${APP_USER}" env \
+  DATABASE_URL="${DATABASE_URL:-sqlite:////opt/headachetrade/shared/data/headache_trade.sqlite3}" \
+  UV_CACHE_DIR="${RELEASE_DIR}/.uv-cache" \
+  uv run python -m app.cli init-db
 
 previous_release="$(readlink -f "${CURRENT_LINK}" || true)"
 ln -sfn "${RELEASE_DIR}" "${CURRENT_LINK}"
