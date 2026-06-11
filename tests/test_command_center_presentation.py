@@ -3,6 +3,9 @@ from types import SimpleNamespace
 from app.presentation_status import status_for
 from app.services.next_action import describe_position_next_action, describe_trade_plan_next_action
 from app.services.view_models import trade_plan_groups
+from app.services.command_center import command_center_payload
+from app.config import Settings
+from app.models import TradePlan
 
 
 def test_status_dictionary_has_safe_fallback():
@@ -31,3 +34,19 @@ def test_trade_plan_groups_separate_execution_states():
     blocked = SimpleNamespace(status="BLOCKED", breakout_entry_price=None, no_chase_above=None)
     groups = trade_plan_groups([active, blocked])
     assert [group["title"] for group in groups] == ["可执行机会", "已拒绝"]
+
+
+def test_command_center_orders_s_before_a(session):
+    for symbol, priority in (("AAPL", "A"), ("MSFT", "S")):
+        session.add(TradePlan(
+            symbol=symbol, name=symbol, direction="LONG", source_structure_id=1,
+            battle_pool_id=1, structure_type="BOTTOM_STRUCTURE", priority_level=priority,
+            stop_price=90, target_1=110, target_2=120, trailing_rule="test",
+            time_stop_rule="test", invalid_condition="test", risk_reward_1=1.5,
+            risk_reward_2=2, status="ACTIVE", reason="test",
+        ))
+    session.commit()
+
+    payload = command_center_payload(session, Settings())
+
+    assert [item["record"].priority_level for item in payload["executable"]] == ["S", "A"]

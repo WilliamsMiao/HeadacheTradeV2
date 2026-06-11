@@ -179,6 +179,40 @@ function setTaskButtonsDisabled(disabled) {
 
 restoreActiveTask();
 
+let livePriceTimer;
+
+async function refreshLivePlanPrices() {
+  const priceNodes = document.querySelectorAll("[data-live-price]");
+  if (!priceNodes.length) return;
+  const statusNodes = document.querySelectorAll("[data-live-price-status]");
+  try {
+    const payload = await getJson("/api/trade-plans/prices");
+    priceNodes.forEach((node) => {
+      const price = payload.prices?.[node.dataset.livePrice];
+      if (Number.isFinite(Number(price)) && Number(price) > 0) {
+        node.textContent = Number(price).toFixed(2);
+      }
+    });
+    const updatedAt = payload.updated_at
+      ? new Intl.DateTimeFormat("zh-CN", {hour: "2-digit", minute: "2-digit", second: "2-digit"}).format(new Date(payload.updated_at))
+      : "刚刚";
+    statusNodes.forEach((node) => {
+      node.textContent = `OpenD 实时价已更新 · ${updatedAt}`;
+      node.dataset.tone = "success";
+    });
+  } catch (error) {
+    statusNodes.forEach((node) => {
+      node.textContent = `实时价更新失败，页面保留最后有效价 · ${error.message}`;
+      node.dataset.tone = "error";
+    });
+  } finally {
+    window.clearTimeout(livePriceTimer);
+    livePriceTimer = window.setTimeout(refreshLivePlanPrices, 15000);
+  }
+}
+
+refreshLivePlanPrices();
+
 document.querySelectorAll("[data-logout]").forEach((button) => {
   button.addEventListener("click", async () => {
     setButtonLoading(button, true);

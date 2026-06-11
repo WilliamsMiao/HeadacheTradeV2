@@ -70,6 +70,8 @@ from app.services.workbench import (
     workbench_watchlist,
 )
 from app.services.command_center import command_center_payload
+from app.services.plan_prices import refresh_trade_plan_prices
+from app.providers.futu_provider import FutuProvider
 from app.services.view_models import (
     battle_view_models,
     candidate_view_models,
@@ -300,6 +302,17 @@ def trade_plans_page(request: Request, session: Session = Depends(get_session)):
         )
     )
     return templates.TemplateResponse(request, "trade_plans.html", {"plans": plans, "groups": trade_plan_groups(plans)})
+
+
+@app.get("/api/trade-plans/prices")
+def trade_plan_prices_api(session: Session = Depends(get_session)):
+    provider = FutuProvider(get_settings())
+    try:
+        return refresh_trade_plan_prices(session, provider)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"OpenD 实时行情暂不可用：{exc}") from exc
+    finally:
+        provider.close()
 
 
 @app.get("/sim-orders", response_class=HTMLResponse)
