@@ -1,37 +1,34 @@
 # HeadacheTradeV2
 
-美股结构趋势交易 MVP：Futu OpenD 数据源、FastAPI/Web、SQLite、本地模拟和复盘。
+基于 Futu OpenD、FastAPI 和 SQLite 的美股日线 + 60 分钟结构交易监控系统。
 
-第一阶段目标不是追求收益率，而是跑通以下闭环：
+系统主流程：
 
-`Futu 自选组同步 -> K 线采集 -> 指标计算 -> 市场/个股趋势过滤 -> 顶底结构识别 -> 状态机 -> 入场候选 -> 风控仓位 -> 人工审批模拟持仓 -> 减仓/退出 -> 复盘统计`
+`Futu 条件选股 -> 最多 300 支候选池 -> 日线状态 -> 60 分钟结构 -> S/A/B/C 评级 -> 重点作战池 -> 交易计划卡 -> 到价提醒`
 
-## 多周期职责
+## 核心原则
 
-- `1d`：大盘与个股趋势权限，不直接触发买入。
-- `60m`：MACD 顶底结构主周期。
-- `15m`：入场触发周期。当前 PR 先完成数据、指标和完整性接入，状态机触发改造在后续 PR 完成。
-- `5m`：工作台展示和执行辅助，不参与第一版交易主逻辑。
+- 核心行情只依赖 `1d / 60m`。
+- `15m / 5m` 仅作为可选增强，不阻断主流程。
+- Futu 自选组不再是系统股票池入口。
+- 市场风向标只提示仓位和节奏，不阻断选股、结构扫描或计划生成。
+- 选股结果和结构事件都不是交易信号。
+- 评分只用于候选排序和关注优先级，不直接触发买卖。
+- 底结构不直接买入，顶结构不直接清仓。
+- 没有明确结构止损和 ATR 时不得生成交易计划。
+- 不接实盘自动下单；计划到价后仍需人工复核。
 
-默认行情任务采集 `1d / 60m / 15m`。如需同时采集 5m，在环境变量中设置：
+## 页面
 
-```bash
-FUTU_INCLUDE_5M=true
-```
+- `/`：系统总览和每日/60 分钟任务。
+- `/candidates`：低位反弹、趋势上行、高位风险、弱势下行四类候选池。
+- `/structures`：60 分钟顶底结构事件。
+- `/battle-pool`：S/A/B/C 重点作战评级。
+- `/trade-plans`：入场区、止损、目标、移动止盈、时间止损和失效条件。
+- `/market`：SPY + QQQ 市场风向标，仅供风险参考。
+- `/opend`：OpenD 安装、配置、启动和验证码管理。
 
-任一核心周期缺少有效 K 线或对应指标时，系统冻结新 ENTRY；5m 缺失不会阻塞核心链路。
-
-## 核心约束
-
-- 评分只用于展示和排序，不参与买卖触发。
-- 底结构只进入观察/等待趋势恢复，不能直接买入。
-- 顶结构只进入风险保护/减仓候选，不能直接清仓。
-- 新开仓必须通过市场环境过滤。
-- 没有止损位不得生成入场建议。
-- 系统只生成建议和模拟持仓，不接实盘自动下单。
-- 当前系统不是投资建议。
-
-## 运行
+## 本地运行
 
 ```bash
 python3 -m venv .venv
@@ -42,27 +39,34 @@ python -m app.cli init-db
 uvicorn app.main:app --host 127.0.0.1 --port 8001
 ```
 
-CLI 入口：
+首次打开页面时设置系统独立访问密码。
+
+## CLI
 
 ```bash
-python -m app.cli sync-watchlist
-python -m app.cli update-market-data
+python -m app.cli screen-market
+python -m app.cli update-core-kline
 python -m app.cli compute-indicators
-python -m app.cli run-pipeline
+python -m app.cli scan-structures
+python -m app.cli rank-battle-pool
+python -m app.cli generate-trade-plans
+python -m app.cli set-price-alerts
+python -m app.cli run-daily
+python -m app.cli run-60m
 python -m app.cli run-backtest
 ```
 
-真实运行默认连接本机 Futu OpenD。Mock 数据源只用于测试和离线开发，不在 Web 侧边栏暴露入口；系统不会生成实盘订单。
+`--mock` 只用于测试和本地开发，不在生产 Web 页面暴露。
 
 ## 生产部署
 
-推荐 Ubuntu 24.04 + systemd + Nginx：
+Ubuntu 24.04 + systemd + Nginx：
 
 ```bash
 sudo bash deploy/install_server.sh
 ```
 
-首次安装后检查：
+生产环境配置：
 
 ```bash
 sudo nano /etc/headachetrade/headachetrade.env
@@ -70,21 +74,6 @@ sudo systemctl status headachetrade
 sudo journalctl -u headachetrade -f
 ```
 
-GitHub Actions 自动部署需要在仓库 Secrets 中配置：
+OpenD 默认安装到 `/opt/futu-opend`，只监听 `127.0.0.1:11111`。Futu 登录信息保存在服务器 `/etc/futu-opend/futu-opend.env`，不进入 SQLite 或 Git。
 
-- `SERVER_HOST`：服务器公网 IP，例如 `47.237.149.132`
-- `SERVER_USER`：用于 SSH 的用户，需可执行 `sudo`
-- `SERVER_PORT`：SSH 端口，默认可不填
-- `SERVER_SSH_KEY`：对应 SSH 私钥
-
-工作流会在 `main` 分支 push 后运行测试，通过后打包代码上传到服务器并重启 `headachetrade.service`。
-
-生产发布会在服务器缺少 OpenD 时自动安装 Futu OpenD。安装路径为 `/opt/futu-opend`，systemd 服务为 `futu-opend.service`，默认监听本机 `127.0.0.1:11111`。Futu 登录信息只保存在服务器本机，不进入 Git：
-
-```bash
-sudo nano /etc/futu-opend/futu-opend.env
-sudo systemctl restart futu-opend
-sudo systemctl status futu-opend
-```
-
-如果要改 OpenD 连接地址，在 `/etc/headachetrade/headachetrade.env` 中设置 `FUTU_HOST` 和 `FUTU_PORT`。
+GitHub Actions 在 PR 上运行测试；合并到 `main` 后自动备份数据库、发布新版本、执行 SQLite 增量迁移、重启服务并检查 `/health`。

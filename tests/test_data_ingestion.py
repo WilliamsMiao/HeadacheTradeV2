@@ -28,8 +28,8 @@ def test_anomalous_bar_does_not_mark_whole_batch_bad(session):
     daily = list(session.scalars(select(KLine).where(KLine.symbol == "AAPL", KLine.timeframe == "1d").order_by(KLine.ts)))
     assert [bar.data_ok for bar in daily] == [True, False, True]
     assert "1 anomalous bars isolated" in results["AAPL:1d"]
-    assert "AAPL:15m" in results
-    for timeframe in ("1d", "60m", "15m"):
+    assert "AAPL:15m" not in results
+    for timeframe in ("1d", "60m"):
         compute_indicators_for_symbol(session, "AAPL", timeframe)
     assert symbol_data_status(session, "AAPL") == (True, "data quality passed")
 
@@ -70,7 +70,7 @@ def test_stale_intraday_data_is_reported_precisely(session):
         ]
     )
     session.commit()
-    for timeframe in ("1d", "60m", "15m"):
+    for timeframe in ("1d", "60m"):
         compute_indicators_for_symbol(session, "AAPL", timeframe)
 
     ok, reason = symbol_data_status(session, "AAPL")

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+<header class="page-header compact">
+  <div><h1>重点作战池</h1><p>综合日线支持、结构清晰度、时效、止损距离、流动性和多标签命中进行评级。</p></div>
+  <div class="header-actions"><a class="button-secondary" href="/trade-plans">查看交易计划</a></div>
+</header>
+<section class="panel">
+  <div class="panel-head"><div class="panel-head-copy"><h2>S / A / B / C 评级</h2><span>S 级最多 3 支，A 级最多 10 支；评分只用于筛选关注优先级</span></div><small>{{ items|length }} 支</small></div>
+  <div class="battle-list">
+    {% for item in items %}
+    <article class="battle-row">
+      <span class="priority priority-{{ item.priority_level|lower }}">{{ item.priority_level }}</span>
+      <div class="battle-main">
+        <header><a href="/symbols/{{ item.symbol }}">{{ item.symbol }}</a><span class="state">{{ item.direction|label }}</span><span class="state">{{ item.daily_state|label }}</span><span class="state structure">{{ item.structure_type|label }}</span></header>
+        <p>{{ item.reason }}</p>
+        <small>下一步：{{ item.next_wait }}</small>
+      </div>
+      <div class="battle-score"><strong>{{ "%.1f"|format(item.score) }}</strong><span>综合评分</span></div>
+    </article>
+    {% else %}
+    <div class="empty"><strong>重点作战池为空</strong><span>结构扫描后会根据质量评级生成重点作战池。</span></div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

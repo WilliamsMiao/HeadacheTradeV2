@@ -35,6 +35,7 @@ class KLine(Base, TimestampMixin):
     low: Mapped[float] = mapped_column(Float)
     close: Mapped[float] = mapped_column(Float)
     volume: Mapped[float] = mapped_column(Float, default=0)
+    turnover: Mapped[float] = mapped_column(Float, default=0)
     data_ok: Mapped[bool] = mapped_column(Boolean, default=True)
     anomaly_reason: Mapped[str] = mapped_column(Text, default="")
 
@@ -47,13 +48,32 @@ class Indicator(Base, TimestampMixin):
     symbol: Mapped[str] = mapped_column(String(32), index=True)
     timeframe: Mapped[str] = mapped_column(String(16), index=True)
     ts: Mapped[datetime] = mapped_column(DateTime, index=True)
+    ma5: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ma10: Mapped[float | None] = mapped_column(Float, nullable=True)
     ma20: Mapped[float | None] = mapped_column(Float, nullable=True)
     ma60: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ema5: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ema10: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ema20: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ema60: Mapped[float | None] = mapped_column(Float, nullable=True)
     macd_dif: Mapped[float | None] = mapped_column(Float, nullable=True)
     macd_dea: Mapped[float | None] = mapped_column(Float, nullable=True)
     macd_hist: Mapped[float | None] = mapped_column(Float, nullable=True)
     atr: Mapped[float | None] = mapped_column(Float, nullable=True)
     volume_ma20: Mapped[float | None] = mapped_column(Float, nullable=True)
+    boll_mid: Mapped[float | None] = mapped_column(Float, nullable=True)
+    boll_upper: Mapped[float | None] = mapped_column(Float, nullable=True)
+    boll_lower: Mapped[float | None] = mapped_column(Float, nullable=True)
+    rsi6: Mapped[float | None] = mapped_column(Float, nullable=True)
+    rsi14: Mapped[float | None] = mapped_column(Float, nullable=True)
+    kdj_k: Mapped[float | None] = mapped_column(Float, nullable=True)
+    kdj_d: Mapped[float | None] = mapped_column(Float, nullable=True)
+    kdj_j: Mapped[float | None] = mapped_column(Float, nullable=True)
+    turnover: Mapped[float | None] = mapped_column(Float, nullable=True)
+    turnover_ma20: Mapped[float | None] = mapped_column(Float, nullable=True)
+    volume_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)
+    change_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    amplitude_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
 class MarketState(Base, TimestampMixin):
@@ -74,6 +94,17 @@ class StockTrend(Base, TimestampMixin):
     symbol: Mapped[str] = mapped_column(String(32), index=True)
     as_of: Mapped[date] = mapped_column(Date, index=True)
     trend: Mapped[str] = mapped_column(String(32), index=True)
+    reason: Mapped[str] = mapped_column(Text)
+
+
+class DailyState(Base, TimestampMixin):
+    __tablename__ = "daily_states"
+    __table_args__ = (UniqueConstraint("symbol", "as_of", name="uq_daily_state_symbol_as_of"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(32), index=True)
+    as_of: Mapped[date] = mapped_column(Date, index=True)
+    state: Mapped[str] = mapped_column(String(32), index=True)
     reason: Mapped[str] = mapped_column(Text)
 
 
@@ -106,6 +137,92 @@ class StructureEvent(Base, TimestampMixin):
     became_failed: Mapped[bool] = mapped_column(Boolean, default=False)
     market_state: Mapped[str] = mapped_column(String(32), default="")
     stock_trend: Mapped[str] = mapped_column(String(32), default="")
+    direction: Mapped[str] = mapped_column(String(16), default="")
+    stage: Mapped[str] = mapped_column(String(24), default="")
+    quality_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    battle_eligible: Mapped[bool] = mapped_column(Boolean, default=False)
+    suggested_action: Mapped[str] = mapped_column(String(64), default="")
+
+
+class CandidateStock(Base, TimestampMixin):
+    __tablename__ = "candidate_stocks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(128), default="")
+    market: Mapped[str] = mapped_column(String(16), default="US")
+    pool_type: Mapped[str] = mapped_column(String(32), index=True)
+    pool_types_json: Mapped[str] = mapped_column(Text, default="[]")
+    tags_json: Mapped[str] = mapped_column(Text, default="[]")
+    selected_reason: Mapped[str] = mapped_column(Text, default="")
+    rank_score: Mapped[float] = mapped_column(Float, default=0, index=True)
+    liquidity_score: Mapped[float] = mapped_column(Float, default=0)
+    heat_score: Mapped[float] = mapped_column(Float, default=0)
+    technical_score: Mapped[float] = mapped_column(Float, default=0)
+    raw_metrics_json: Mapped[str] = mapped_column(Text, default="{}")
+    active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    selected_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+
+class CandidateSnapshot(Base, TimestampMixin):
+    __tablename__ = "candidate_snapshots"
+    __table_args__ = (UniqueConstraint("run_id", "symbol", name="uq_candidate_snapshot_run_symbol"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    run_id: Mapped[str] = mapped_column(String(64), index=True)
+    symbol: Mapped[str] = mapped_column(String(32), index=True)
+    pool_type: Mapped[str] = mapped_column(String(32), index=True)
+    pool_types_json: Mapped[str] = mapped_column(Text, default="[]")
+    tags_json: Mapped[str] = mapped_column(Text, default="[]")
+    rank_score: Mapped[float] = mapped_column(Float, default=0)
+    raw_metrics_json: Mapped[str] = mapped_column(Text, default="{}")
+
+
+class BattlePoolItem(Base, TimestampMixin):
+    __tablename__ = "battle_pool_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    direction: Mapped[str] = mapped_column(String(16), default="RISK")
+    priority_level: Mapped[str] = mapped_column(String(4), index=True)
+    source_structure_id: Mapped[int] = mapped_column(Integer, index=True)
+    daily_state: Mapped[str] = mapped_column(String(32), default="UNKNOWN")
+    structure_type: Mapped[str] = mapped_column(String(48))
+    score: Mapped[float] = mapped_column(Float, default=0, index=True)
+    reason: Mapped[str] = mapped_column(Text)
+    next_wait: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(24), default="ACTIVE", index=True)
+
+
+class TradePlan(Base, TimestampMixin):
+    __tablename__ = "trade_plans"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(32), index=True)
+    name: Mapped[str] = mapped_column(String(128), default="")
+    direction: Mapped[str] = mapped_column(String(16), default="LONG")
+    source_structure_id: Mapped[int] = mapped_column(Integer, index=True)
+    battle_pool_id: Mapped[int] = mapped_column(Integer, index=True)
+    daily_state: Mapped[str] = mapped_column(String(32), default="UNKNOWN")
+    structure_type: Mapped[str] = mapped_column(String(48))
+    priority_level: Mapped[str] = mapped_column(String(4), index=True)
+    entry_mode: Mapped[str] = mapped_column(String(32), default="BREAKOUT")
+    breakout_entry_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    pullback_entry_low: Mapped[float | None] = mapped_column(Float, nullable=True)
+    pullback_entry_high: Mapped[float | None] = mapped_column(Float, nullable=True)
+    low_absorb_entry_low: Mapped[float | None] = mapped_column(Float, nullable=True)
+    low_absorb_entry_high: Mapped[float | None] = mapped_column(Float, nullable=True)
+    stop_price: Mapped[float] = mapped_column(Float)
+    target_1: Mapped[float] = mapped_column(Float)
+    target_2: Mapped[float] = mapped_column(Float)
+    trailing_rule: Mapped[str] = mapped_column(Text)
+    time_stop_rule: Mapped[str] = mapped_column(Text)
+    invalid_condition: Mapped[str] = mapped_column(Text)
+    risk_reward_1: Mapped[float] = mapped_column(Float)
+    risk_reward_2: Mapped[float] = mapped_column(Float)
+    alert_status: Mapped[str] = mapped_column(String(24), default="NOT_ARMED")
+    status: Mapped[str] = mapped_column(String(24), default="ACTIVE", index=True)
+    reason: Mapped[str] = mapped_column(Text)
 
 
 class TradingState(Base, TimestampMixin):

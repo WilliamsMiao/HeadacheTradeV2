@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block content %}
+<header class="page-header compact">
+  <div><h1>结构事件</h1><p>60 分钟结构只描述市场行为，不直接产生买入、卖出或清仓动作。</p></div>
+  <div class="header-actions"><button data-task="run-pipeline" data-loading-text="正在扫描">重新扫描结构</button></div>
+</header>
+<section class="panel">
+  <div class="panel-head"><div class="panel-head-copy"><h2>最近结构</h2><span>确认位用于判断结构成立，失效位用于计划风控</span></div><small>{{ events|length }} 条</small></div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>股票</th><th>日线状态</th><th>60 分钟结构</th><th>阶段</th><th>时间</th><th>确认位</th><th>失效位</th><th>建议动作</th><th>原因</th></tr></thead>
+      <tbody>
+        {% for event in events %}
+        <tr>
+          <td class="symbol-cell"><a href="/symbols/{{ event.symbol }}">{{ event.symbol }}</a></td>
+          <td><span class="state">{{ daily_states[event.symbol].state|label if event.symbol in daily_states else "数据不足" }}</span></td>
+          <td><span class="state structure">{{ event.event_type|label }}</span></td>
+          <td>{{ event.stage|label }}</td>
+          <td>{{ event.event_ts|dt }}</td>
+          <td>{{ event.confirm_level|price }}</td>
+          <td>{{ event.invalidation_level|price }}</td>
+          <td>{{ event.suggested_action or "等待结构评分" }}</td>
+          <td><p class="reason-short" title="{{ event.reason|reason }}">{{ event.reason|reason(72) }}</p></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9"><div class="empty"><strong>暂无结构事件</strong><span>先更新日线与 60 分钟行情、计算指标，再扫描结构。</span></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

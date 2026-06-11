@@ -62,10 +62,14 @@ function setFormFeedback(form, message, tone = "") {
 
 function taskResultMessage(taskName, payload) {
   const labels = {
-    "sync-watchlist": "自选股同步完成",
+    "screen-market": "候选池扫描完成",
     "update-market-data": "行情更新完成",
     "compute-indicators": "指标计算完成",
-    "run-pipeline": "状态机刷新完成",
+    "scan-structures": "结构扫描完成",
+    "run-pipeline": "评级与计划刷新完成",
+    "run-daily": "每日完整扫描完成",
+    "run-60m": "60 分钟监控刷新完成",
+    "set-price-alerts": "到价提醒同步完成",
     "run-backtest": "复盘生成完成",
   };
   const detail = Object.entries(payload || {})
@@ -145,7 +149,11 @@ function renderTaskProgress(payload) {
   const container = document.querySelector("[data-task-progress]");
   if (!container) return;
   const labels = {
+    "screen-market": "扫描全市场候选池",
     "update-market-data": "更新行情",
+    "run-daily": "运行每日完整扫描",
+    "run-60m": "刷新 60 分钟监控",
+    "set-price-alerts": "同步到价提醒",
     "run-backtest": "生成复盘",
   };
   const percent = Math.max(0, Math.min(100, Number(payload.progress_pct || 0)));

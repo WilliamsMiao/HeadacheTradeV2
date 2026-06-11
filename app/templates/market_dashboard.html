@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block content %}
+<header class="page-header">
+  <div><h1>市场风向标</h1><p>市场环境用于提示仓位和节奏，不阻断候选池、结构扫描、重点作战池或交易计划生成。</p></div>
+  <section class="market-tile {{ market.state|css_class if market else 'market-unknown' }}">
+    <span>综合状态</span><strong>{{ market.state|label if market else "尚未计算" }}</strong>
+    <small>{{ market.state|market_desc if market else "运行扫描后生成" }}</small>
+  </section>
+</header>
+<section class="panel">
+  <div class="panel-head"><div class="panel-head-copy"><h2>基准拆解</h2><span>当前版本基于 SPY 与 QQQ，后续可扩展 VIX 与半导体指数</span></div></div>
+  <div class="market-check-grid market-page-grid">
+    {% for check in market_checks %}
+    <article class="market-check">
+      <header><strong>{{ check.symbol }}</strong><span class="state {{ 'state-success' if check.passed else ('state-warning' if not check.ready else 'state-danger') }}">{{ "偏强" if check.passed else ("数据不完整" if not check.ready else "偏弱") }}</span></header>
+      {% if check.ready %}
+      <dl>
+        <div><dt>收盘价</dt><dd>{{ check.close|price }}</dd></div>
+        <div><dt>MA20</dt><dd>{{ check.ma20|price }}</dd></div>
+        <div><dt>MA60</dt><dd>{{ check.ma60|price }}</dd></div>
+        <div><dt>MACD DIF</dt><dd>{{ "%.3f"|format(check.macd_dif) }}</dd></div>
+      </dl>
+      <ul class="condition-list">
+        <li class="{{ 'passed' if check.above_ma60 else 'failed' }}">收盘价{{ "高于" if check.above_ma60 else "不高于" }} MA60</li>
+        <li class="{{ 'passed' if check.ma_bullish else 'failed' }}">MA20{{ "不低于" if check.ma_bullish else "低于" }} MA60</li>
+        <li class="{{ 'passed' if check.momentum_ok else 'failed' }}">动能条件{{ "通过" if check.momentum_ok else "未通过" }}</li>
+      </ul>
+      {% else %}<p class="data-issue">{{ check.reason|reason }}</p>{% endif %}
+    </article>
+    {% endfor %}
+  </div>
+  <div class="advisory-note">
+    <strong>如何使用这个风向标</strong>
+    <p>{{ market.state|market_reason_desc(market.reason) if market else "市场数据尚未计算。" }} 系统仍会继续生成候选、结构和计划；用户可据此降低单笔风险或减少同时关注的计划数量。</p>
+  </div>
+</section>
+{% endblock %}

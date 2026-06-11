@@ -24,6 +24,9 @@ from app.auth import (
 )
 from app.models import (
     ApprovalRecord,
+    BattlePoolItem,
+    CandidateStock,
+    DailyState,
     Indicator,
     KLine,
     MarketState,
@@ -34,12 +37,22 @@ from app.models import (
     StockTrend,
     StructureEvent,
     TradeSignal,
+    TradePlan,
     TradingState,
     WatchlistItem,
 )
 from app.services.approvals import approve_signal, reject_signal
 from app.services.backtest import run_backtest
-from app.services.pipeline import run_compute_indicators, run_full_refresh, run_pipeline, run_sync_watchlist, run_update_market_data
+from app.services.pipeline import (
+    run_60m,
+    run_compute_indicators,
+    run_daily,
+    run_pipeline,
+    run_scan_structures,
+    run_screen_market,
+    run_set_price_alerts,
+    run_update_market_data,
+)
 from app.services.pipeline import symbol_data_status
 from app.services.market import market_diagnostics
 from app.services import opend_admin
@@ -65,6 +78,7 @@ from app.presentation import (
     format_return,
     format_shares,
     label_for,
+    json_list,
     css_class_for,
 )
 
@@ -86,6 +100,7 @@ templates.env.filters["price"] = format_price
 templates.env.filters["return_pct"] = format_return
 templates.env.filters["dt"] = format_datetime
 templates.env.filters["css_class"] = css_class_for
+templates.env.filters["json_list"] = json_list
 
 app = FastAPI(title="HeadacheTradeV2", version="0.1.0")
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
@@ -202,10 +217,82 @@ def dashboard(request: Request, session: Session = Depends(get_session)):
     return templates.TemplateResponse(request, "dashboard.html", _dashboard_context(session))
 
 
+@app.get("/candidates", response_class=HTMLResponse)
+def candidates_page(request: Request, pool: str = "", session: Session = Depends(get_session)):
+    query = select(CandidateStock).where(CandidateStock.active.is_(True))
+    if pool:
+        query = query.where(CandidateStock.pool_types_json.contains(f'"{pool}"'))
+    items = list(session.scalars(query.order_by(CandidateStock.rank_score.desc(), CandidateStock.symbol)))
+    return templates.TemplateResponse(
+        request,
+        "candidates.html",
+        {
+            "items": items,
+            "selected_pool": pool,
+            "pool_counts": _candidate_pool_counts(session),
+        },
+    )
+
+
+@app.get("/structures", response_class=HTMLResponse)
+def structures_page(request: Request, session: Session = Depends(get_session)):
+    events = list(
+        session.scalars(
+            select(StructureEvent)
+            .where(StructureEvent.timeframe == STRUCTURE_TIMEFRAME)
+            .order_by(StructureEvent.event_ts.desc())
+            .limit(300)
+        )
+    )
+    daily_states = _latest_daily_states(session)
+    return templates.TemplateResponse(
+        request,
+        "structures.html",
+        {"events": events, "daily_states": daily_states},
+    )
+
+
+@app.get("/battle-pool", response_class=HTMLResponse)
+def battle_pool_page(request: Request, session: Session = Depends(get_session)):
+    items = list(
+        session.scalars(
+            select(BattlePoolItem)
+            .where(BattlePoolItem.status == "ACTIVE")
+            .order_by(BattlePoolItem.score.desc(), BattlePoolItem.symbol)
+        )
+    )
+    return templates.TemplateResponse(request, "battle_pool.html", {"items": items})
+
+
+@app.get("/trade-plans", response_class=HTMLResponse)
+def trade_plans_page(request: Request, session: Session = Depends(get_session)):
+    plans = list(
+        session.scalars(
+            select(TradePlan)
+            .where(TradePlan.status == "ACTIVE")
+            .order_by(TradePlan.priority_level, TradePlan.updated_at.desc())
+        )
+    )
+    return templates.TemplateResponse(request, "trade_plans.html", {"plans": plans})
+
+
+@app.get("/market", response_class=HTMLResponse)
+def market_page(request: Request, session: Session = Depends(get_session)):
+    settings = get_settings()
+    market = session.scalar(select(MarketState).order_by(MarketState.updated_at.desc()).limit(1))
+    return templates.TemplateResponse(
+        request,
+        "market_dashboard.html",
+        {"market": market, "market_checks": market_diagnostics(session, settings.market_symbols)},
+    )
+
+
 @app.get("/symbols/{symbol}", response_class=HTMLResponse)
 def symbol_detail(symbol: str, request: Request, session: Session = Depends(get_session)):
     symbol = symbol.upper()
-    item = session.scalar(select(WatchlistItem).where(WatchlistItem.symbol == symbol))
+    item = session.scalar(select(CandidateStock).where(CandidateStock.symbol == symbol))
+    if item is None:
+        item = session.scalar(select(WatchlistItem).where(WatchlistItem.symbol == symbol))
     if item is None:
         raise HTTPException(status_code=404, detail="symbol not found")
     klines = list(
@@ -225,7 +312,13 @@ def symbol_detail(symbol: str, request: Request, session: Session = Depends(get_
         session.scalars(select(StateTransitionLog).where(StateTransitionLog.symbol == symbol).order_by(StateTransitionLog.created_at.desc()).limit(20))
     )
     state = session.scalar(select(TradingState).where(TradingState.symbol == symbol))
-    trend = session.scalar(select(StockTrend).where(StockTrend.symbol == symbol).order_by(StockTrend.as_of.desc()).limit(1))
+    daily_state = session.scalar(select(DailyState).where(DailyState.symbol == symbol).order_by(DailyState.as_of.desc()).limit(1))
+    plan = session.scalar(
+        select(TradePlan)
+        .where(TradePlan.symbol == symbol, TradePlan.status == "ACTIVE")
+        .order_by(TradePlan.updated_at.desc())
+        .limit(1)
+    )
     position = session.scalar(select(Position).where(Position.symbol == symbol, Position.status == "OPEN"))
     signals = list(session.scalars(select(TradeSignal).where(TradeSignal.symbol == symbol).order_by(TradeSignal.created_at.desc()).limit(20)))
     return templates.TemplateResponse(
@@ -238,7 +331,8 @@ def symbol_detail(symbol: str, request: Request, session: Session = Depends(get_
             "structures": structures,
             "logs": logs,
             "state": state,
-            "trend": trend,
+            "daily_state": daily_state,
+            "plan": plan,
             "position": position,
             "signals": signals,
         },
@@ -351,7 +445,7 @@ def api_opend_verify_code(payload: OpenDCodePayload):
 @app.post("/tasks/{task_name}")
 def run_task(task_name: str, mock: bool = False, session: Session = Depends(get_session)):
     settings = get_settings()
-    if task_name in {"update-market-data", "run-backtest"}:
+    if task_name in {"screen-market", "update-market-data", "run-daily", "run-60m", "set-price-alerts", "run-backtest"}:
         try:
             state = start_task(
                 task_name,
@@ -360,14 +454,12 @@ def run_task(task_name: str, mock: bool = False, session: Session = Depends(get_
         except RuntimeError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         return JSONResponse(task_payload(state), status_code=202)
-    if task_name == "sync-watchlist":
-        payload = {"synced": run_sync_watchlist(session, settings, use_mock=mock)}
-    elif task_name == "compute-indicators":
+    if task_name == "compute-indicators":
         payload = {"computed": run_compute_indicators(session, settings)}
+    elif task_name == "scan-structures":
+        payload = run_scan_structures(session, settings)
     elif task_name == "run-pipeline":
         payload = run_pipeline(session, settings)
-    elif task_name == "mock-full-refresh":
-        payload = run_full_refresh(session, settings, use_mock=True)
     else:
         raise HTTPException(status_code=404, detail="unknown task")
     return payload
@@ -389,8 +481,22 @@ def task_status(task_id: str):
 
 def _run_background_task(task_name: str, settings, mock: bool, progress):
     with SessionLocal() as session:
+        if task_name == "screen-market":
+            progress(0, 1, "正在通过 Futu 条件选股扫描美股市场")
+            result = run_screen_market(session, settings, use_mock=mock)
+            progress(1, 1, "候选池已生成")
+            return result
         if task_name == "update-market-data":
             return run_update_market_data(session, settings, use_mock=mock, on_progress=progress)
+        if task_name == "run-daily":
+            return run_daily(session, settings, use_mock=mock, on_progress=progress)
+        if task_name == "run-60m":
+            return run_60m(session, settings, use_mock=mock, on_progress=progress)
+        if task_name == "set-price-alerts":
+            progress(0, 1, "正在同步 Futu 到价提醒")
+            result = run_set_price_alerts(session, settings, use_mock=mock)
+            progress(1, 1, "到价提醒已同步")
+            return result
         if task_name == "run-backtest":
             progress(0, 1, "正在执行时间步进复盘")
             result = run_backtest(session, settings)
@@ -457,58 +563,66 @@ def _dashboard_context(session: Session) -> dict[str, object]:
     settings = get_settings()
     market = session.scalar(select(MarketState).order_by(MarketState.updated_at.desc()).limit(1))
     market_checks = market_diagnostics(session, settings.market_symbols)
-    items = list(session.scalars(select(WatchlistItem).where(WatchlistItem.active.is_(True)).order_by(WatchlistItem.symbol)))
-    rows = []
-    for item in items:
-        trend = session.scalar(select(StockTrend).where(StockTrend.symbol == item.symbol).order_by(StockTrend.as_of.desc()).limit(1))
-        state = session.scalar(select(TradingState).where(TradingState.symbol == item.symbol))
-        structure = session.scalar(
-            select(StructureEvent)
-            .where(
-                StructureEvent.symbol == item.symbol,
-                StructureEvent.timeframe == STRUCTURE_TIMEFRAME,
-            )
-            .order_by(StructureEvent.event_ts.desc())
-            .limit(1)
+    candidates = list(
+        session.scalars(
+            select(CandidateStock)
+            .where(CandidateStock.active.is_(True))
+            .order_by(CandidateStock.rank_score.desc())
+            .limit(12)
         )
-        signal = session.scalar(select(TradeSignal).where(TradeSignal.symbol == item.symbol, TradeSignal.status == "PENDING").order_by(TradeSignal.created_at.desc()).limit(1))
-        position = session.scalar(select(Position).where(Position.symbol == item.symbol, Position.status == "OPEN"))
-        data_ok, data_reason = symbol_data_status(session, item.symbol)
-        rows.append(
-            {
-                "item": item,
-                "trend": trend,
-                "state": state,
-                "structure": structure,
-                "signal": signal,
-                "position": position,
-                "data_ok": data_ok,
-                "data_reason": data_reason,
-            }
+    )
+    battle_items = list(
+        session.scalars(
+            select(BattlePoolItem)
+            .where(BattlePoolItem.status == "ACTIVE")
+            .order_by(BattlePoolItem.score.desc())
+            .limit(12)
         )
+    )
+    plans = list(
+        session.scalars(
+            select(TradePlan)
+            .where(TradePlan.status == "ACTIVE")
+            .order_by(TradePlan.priority_level, TradePlan.updated_at.desc())
+            .limit(6)
+        )
+    )
     signals = list(session.scalars(select(TradeSignal).where(TradeSignal.status == "PENDING").order_by(TradeSignal.created_at.desc()).limit(30)))
     positions = list(session.scalars(select(Position).where(Position.status == "OPEN").order_by(Position.created_at.desc())))
     reviews = list(session.scalars(select(ReviewStat).order_by(ReviewStat.created_at.desc()).limit(20)))
     approvals = list(session.scalars(select(ApprovalRecord).order_by(ApprovalRecord.created_at.desc()).limit(20)))
-    risk_rows = [
-        row
-        for row in rows
-        if (row["state"] and row["state"].state in {"RISK_PROTECTION", "EXIT_CANDIDATE"})
-        or (row["signal"] and row["signal"].signal_type in {"REDUCE", "EXIT"})
-    ]
     summary = {
-        "pending_signals": len(signals),
+        "candidate_count": session.query(CandidateStock).filter(CandidateStock.active.is_(True)).count(),
+        "battle_count": session.query(BattlePoolItem).filter(BattlePoolItem.status == "ACTIVE").count(),
+        "plan_count": session.query(TradePlan).filter(TradePlan.status == "ACTIVE").count(),
         "open_positions": len(positions),
-        "risk_items": len(risk_rows),
-        "watchlist": len(rows),
     }
     return {
         "market": market,
         "market_checks": market_checks,
-        "rows": rows,
+        "candidates": candidates,
+        "battle_items": battle_items,
+        "plans": plans,
         "signals": signals,
         "positions": positions,
         "reviews": reviews,
         "approvals": approvals,
         "summary": summary,
     }
+
+
+def _candidate_pool_counts(session: Session) -> dict[str, int]:
+    items = list(session.scalars(select(CandidateStock).where(CandidateStock.active.is_(True))))
+    pools = ("LOW_REBOUND", "TREND_UP", "HIGH_RISK", "WEAK_DOWN")
+    return {
+        pool: sum(f'"{pool}"' in item.pool_types_json for item in items)
+        for pool in pools
+    }
+
+
+def _latest_daily_states(session: Session) -> dict[str, DailyState]:
+    records = list(session.scalars(select(DailyState).order_by(DailyState.symbol, DailyState.as_of.desc())))
+    output: dict[str, DailyState] = {}
+    for record in records:
+        output.setdefault(record.symbol, record)
+    return output

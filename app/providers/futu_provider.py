@@ -11,6 +11,7 @@ class FutuProvider(MarketDataProvider):
         self.settings = settings
         self._quote_ctx = None
         self._last_history_request_at = 0.0
+        self._stock_filter_requests: list[float] = []
 
     def _quote_context(self):
         if self._quote_ctx is not None:
@@ -51,6 +52,159 @@ class FutuProvider(MarketDataProvider):
                 }
             )
         return output
+
+    def get_stock_filter_candidates(self) -> list[dict[str, object]]:
+        from futu import (
+            AccumulateFilter,
+            KLType,
+            Market,
+            PatternFilter,
+            SimpleFilter,
+            SortDir,
+            StockField,
+        )
+
+        quote_ctx = self._quote_context()
+        pattern_groups = {
+            "LOW_REBOUND": (
+                ("MACD_LOW_IMPROVING", StockField.MACD_GOLD_CROSS_LOW),
+                ("KDJ_LOW_GOLD_CROSS", StockField.KDJ_GOLD_CROSS_LOW),
+                ("KDJ_BOTTOM_DIVERGENCE", StockField.KDJ_BOTTOM_DIVERGENCE),
+                ("BOLL_CROSS_MIDDLE_UP", StockField.BOLL_CROSS_MIDDLE_UP),
+            ),
+            "TREND_UP": (
+                ("MA_ALIGNMENT_LONG", StockField.MA_ALIGNMENT_LONG),
+                ("EMA_ALIGNMENT_LONG", StockField.EMA_ALIGNMENT_LONG),
+                ("BOLL_BREAK_UPPER", StockField.BOLL_BREAK_UPPER),
+                ("BOLL_CROSS_MIDDLE_UP", StockField.BOLL_CROSS_MIDDLE_UP),
+            ),
+            "HIGH_RISK": (
+                ("MACD_DEATH_CROSS_HIGH", StockField.MACD_DEATH_CROSS_HIGH),
+                ("MACD_TOP_DIVERGENCE", StockField.MACD_TOP_DIVERGENCE),
+                ("KDJ_DEATH_CROSS_HIGH", StockField.KDJ_DEATH_CROSS_HIGH),
+                ("RSI_TOP_DIVERGENCE", StockField.RSI_TOP_DIVERGENCE),
+            ),
+            "WEAK_DOWN": (
+                ("MA_ALIGNMENT_SHORT", StockField.MA_ALIGNMENT_SHORT),
+                ("EMA_ALIGNMENT_SHORT", StockField.EMA_ALIGNMENT_SHORT),
+                ("BOLL_CROSS_MIDDLE_DOWN", StockField.BOLL_CROSS_MIDDLE_DOWN),
+            ),
+        }
+        output: list[dict[str, object]] = []
+        for pool_type, patterns in pattern_groups.items():
+            for tag, stock_field in patterns:
+                price_filter = SimpleFilter()
+                price_filter.stock_field = StockField.CUR_PRICE
+                price_filter.filter_min = 5
+                price_filter.is_no_filter = False
+
+                market_value_filter = SimpleFilter()
+                market_value_filter.stock_field = StockField.MARKET_VAL
+                market_value_filter.filter_min = 2_000_000_000
+                market_value_filter.is_no_filter = False
+
+                volume_ratio = SimpleFilter()
+                volume_ratio.stock_field = StockField.VOLUME_RATIO
+                volume_ratio.is_no_filter = True
+
+                turnover_filter = AccumulateFilter()
+                turnover_filter.stock_field = StockField.TURNOVER
+                turnover_filter.days = 3
+                turnover_filter.filter_min = 20_000_000
+                turnover_filter.sort = SortDir.DESCEND
+                turnover_filter.is_no_filter = False
+
+                pattern_filter = PatternFilter()
+                pattern_filter.stock_field = stock_field
+                pattern_filter.ktype = KLType.K_DAY
+                pattern_filter.is_no_filter = False
+
+                filters = [
+                    price_filter,
+                    market_value_filter,
+                    volume_ratio,
+                    turnover_filter,
+                    pattern_filter,
+                ]
+                begin = 0
+                while begin < 300:
+                    self._wait_for_stock_filter_quota()
+                    ret, data = self._request_stock_filter(
+                        quote_ctx,
+                        Market.US,
+                        filters,
+                        begin,
+                        min(200, 300 - begin),
+                    )
+                    if ret != 0:
+                        raise RuntimeError(f"Futu get_stock_filter failed for {pool_type}/{tag}: {data}")
+                    last_page, _, rows = data
+                    for row in rows:
+                        code = str(row.stock_code or "").upper()
+                        if not code.startswith("US.") or code.startswith("US.."):
+                            continue
+                        output.append(
+                            {
+                                "symbol": code.removeprefix("US."),
+                                "name": str(row.stock_name or code.removeprefix("US.")),
+                                "market": "US",
+                                "pool_type": pool_type,
+                                "tag": tag,
+                                "cur_price": _futu_value(row, price_filter),
+                                "market_val": _futu_value(row, market_value_filter),
+                                "turnover_3d": _futu_value(row, turnover_filter),
+                                "volume_ratio": _futu_value(row, volume_ratio),
+                            }
+                        )
+                    if last_page or not rows:
+                        break
+                    begin += len(rows)
+        return output
+
+    def get_market_snapshot(self, symbols: list[str]) -> list[dict[str, object]]:
+        quote_ctx = self._quote_context()
+        codes = [symbol if symbol.startswith("US.") else f"US.{symbol}" for symbol in symbols]
+        ret, data = quote_ctx.get_market_snapshot(codes)
+        if ret != 0:
+            raise RuntimeError(f"Futu get_market_snapshot failed: {data}")
+        return data.to_dict("records")
+
+    def set_price_reminder(
+        self,
+        symbol: str,
+        reminder_type: str,
+        value: float,
+        note: str,
+    ) -> int:
+        from futu import PriceReminderFreq, PriceReminderType, SetPriceReminderOp
+
+        type_map = {
+            "PRICE_UP": PriceReminderType.PRICE_UP,
+            "PRICE_DOWN": PriceReminderType.PRICE_DOWN,
+        }
+        if reminder_type not in type_map:
+            raise ValueError(f"unsupported reminder type: {reminder_type}")
+        code = symbol if symbol.startswith("US.") else f"US.{symbol}"
+        ret, data = self._quote_context().set_price_reminder(
+            code=code,
+            op=SetPriceReminderOp.ADD,
+            reminder_type=type_map[reminder_type],
+            reminder_freq=PriceReminderFreq.ALWAYS,
+            value=value,
+            note=note[:10],
+        )
+        if ret != 0:
+            raise RuntimeError(f"Futu set_price_reminder failed for {symbol}: {data}")
+        return int(data)
+
+    def get_price_reminders(self, symbol: str) -> list[dict[str, object]]:
+        code = symbol if symbol.startswith("US.") else f"US.{symbol}"
+        ret, data = self._quote_context().get_price_reminder(code=code)
+        if ret != 0:
+            if "empty data" in str(data).lower():
+                return []
+            raise RuntimeError(f"Futu get_price_reminder failed for {symbol}: {data}")
+        return data.to_dict("records")
 
     def _discover_watchlist_group(self, quote_ctx) -> str:
         ret, data = quote_ctx.get_user_security_group()
@@ -105,6 +259,7 @@ class FutuProvider(MarketDataProvider):
                     low=float(row["low"]),
                     close=float(row["close"]),
                     volume=float(row.get("volume", 0)),
+                    turnover=float(row.get("turnover", 0) or 0),
                 )
             )
         return bars
@@ -127,3 +282,41 @@ class FutuProvider(MarketDataProvider):
         if elapsed < 0.55:
             sleep(0.55 - elapsed)
         self._last_history_request_at = monotonic()
+
+    def _wait_for_stock_filter_quota(self) -> None:
+        now = monotonic()
+        self._stock_filter_requests = [
+            timestamp for timestamp in self._stock_filter_requests
+            if now - timestamp < 30.0
+        ]
+        if len(self._stock_filter_requests) >= 10:
+            wait_seconds = 30.2 - (now - self._stock_filter_requests[0])
+            if wait_seconds > 0:
+                sleep(wait_seconds)
+        self._stock_filter_requests.append(monotonic())
+
+    @staticmethod
+    def _request_stock_filter(quote_ctx, market, filters, begin: int, num: int):
+        ret, data = quote_ctx.get_stock_filter(
+            market=market,
+            filter_list=filters,
+            begin=begin,
+            num=num,
+        )
+        if ret != 0 and "每30秒最多10次" in str(data):
+            sleep(30.2)
+            ret, data = quote_ctx.get_stock_filter(
+                market=market,
+                filter_list=filters,
+                begin=begin,
+                num=num,
+            )
+        return ret, data
+
+
+def _futu_value(row, filter_item) -> float | None:
+    try:
+        value = row[filter_item]
+        return float(value)
+    except (KeyError, TypeError, ValueError):
+        return None

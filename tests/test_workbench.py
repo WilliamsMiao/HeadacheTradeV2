@@ -111,7 +111,7 @@ def test_frames_include_all_supported_timeframes_and_optional_5m_does_not_block(
     assert tuple(payload["frames"]) == SUPPORTED_TIMEFRAMES
     assert payload["frames"]["1d"]["available"] is True
     assert payload["frames"]["60m"]["events"][0]["kind"] == "BOTTOM_STRUCTURE"
-    assert payload["frames"]["15m"]["signals"][0]["kind"] == "BUY"
+    assert payload["frames"]["15m"]["available"] is False
     assert payload["frames"]["5m"]["available"] is False
     assert payload["frames"]["5m"]["bars"] == []
 
