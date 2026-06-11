@@ -177,3 +177,23 @@ def test_symbol_detail_renders_cancelled_signal_reason():
     assert "建议与纠错历史" in response.text
     assert "因触发失败取消" in response.text
     assert "15 分钟触发后跌回触发位下方" in response.text
+
+
+def test_workbench_page_and_apis_render_without_exposing_internal_labels():
+    client = authenticated_client()
+    with SessionLocal() as session:
+        item = session.scalar(select(WatchlistItem).where(WatchlistItem.symbol == "AAPL"))
+        if item is None:
+            session.add(WatchlistItem(symbol="AAPL", name="Apple", active=True))
+            session.commit()
+
+    response = client.get("/workbench/AAPL")
+    assert response.status_code == 200
+    assert "多周期决策工作台" in response.text
+    assert "前端不生成独立信号" in response.text
+    assert ">WAIT_15M_TRIGGER<" not in response.text
+
+    for endpoint in ("frames", "state", "events", "signals", "debug"):
+        api_response = client.get(f"/api/workbench/AAPL/{endpoint}")
+        assert api_response.status_code == 200
+        assert api_response.json()["symbol"] == "AAPL"

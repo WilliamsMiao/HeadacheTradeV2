@@ -60,3 +60,15 @@ ENTRY 建议持久化结构编号、15m 触发时间/参考价、每股风险、
 ## 时间步进回测
 
 `app.services.backtest` 将原始 K 线逐步暴露到隔离数据库，并复用市场、趋势、结构、状态机、纠错、风控和审批模块。回测结果写入 `BacktestTrade`，系统统计写入 `ReviewStat`；实时 `TradeSignal` 和 `Position` 不会被回测污染。
+
+## 多周期工作台
+
+`app.services.workbench` 为 `/workbench/{symbol}` 提供只读聚合模型。页面固定展示日线、60 分钟、15 分钟与可折叠的 5 分钟行情，并通过以下接口读取服务器已经计算的结果：
+
+- `/api/workbench/{symbol}/frames`：K 线、MA20、MA60、MACD、结构标记、交易建议标记与持仓风险线；
+- `/api/workbench/{symbol}/state`：市场、趋势、交易状态、下一步等待、剧本条件与当前风控；
+- `/api/workbench/{symbol}/events`：结构事件历史；
+- `/api/workbench/{symbol}/signals`：建议与纠错历史；
+- `/api/workbench/{symbol}/debug`：数据窗口和读模型摘要。
+
+JavaScript 只绘制这些接口返回的事件和建议，不识别结构、不生成交易标记，也不引用展示评分。5 分钟行情属于辅助展示，缺失时接口仍返回空 frame，且不会阻塞核心三周期工作流。
