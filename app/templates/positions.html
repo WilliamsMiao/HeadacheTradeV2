@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+<header class="page-header compact">
+  <div><h1>模拟持仓</h1><p>持仓管理优先于新机会，系统不会为了新 S 级标的自动换仓。</p></div>
+</header>
+<section class="panel">
+  <div class="panel-head"><div class="panel-head-copy"><h2>持仓与风控</h2><span>硬止损、目标位、移动止盈和日内退出状态</span></div><small>{{ positions|length }} 条</small></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>标的</th><th>状态</th><th>数量</th><th>入场价</th><th>当前 R</th><th>止损</th><th>目标 1</th><th>目标 2</th><th>移动止盈</th><th>退出原因</th></tr></thead>
+    <tbody>
+    {% for position in positions %}
+      <tr><td class="symbol-cell">{{ position.symbol }}</td><td><span class="state">{{ position.status|label }}</span></td><td>{{ position.shares }}</td><td>{{ position.entry_price|price }}</td><td>{{ "%.2f"|format(position.current_r) }}R</td><td>{{ position.stop_price|price }}</td><td>{{ position.target_1|price }}</td><td>{{ position.target_2|price }}</td><td>{{ position.trailing_stop_price|price }}</td><td>{{ position.exit_reason or "-" }}</td></tr>
+    {% else %}
+      <tr><td colspan="10"><div class="empty"><strong>暂无模拟持仓</strong><span>模拟订单成交后会自动创建持仓。</span></div></td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+{% endblock %}

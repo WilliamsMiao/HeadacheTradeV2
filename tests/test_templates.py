@@ -307,3 +307,15 @@ def test_workbench_page_and_apis_render_without_exposing_internal_labels():
         api_response = client.get(f"/api/workbench/AAPL/{endpoint}")
         assert api_response.status_code == 200
         assert api_response.json()["symbol"] == "AAPL"
+
+
+def test_simulation_pages_render_and_require_auth():
+    client = authenticated_client()
+    for path, heading in (
+        ("/sim-orders", "模拟订单"),
+        ("/positions", "模拟持仓"),
+        ("/journal", "交易日志"),
+    ):
+        response = client.get(path)
+        assert response.status_code == 200
+        assert heading in response.text

@@ -118,6 +118,74 @@ def _migrate_sqlite_schema(target_engine=engine) -> None:
                     "ON trade_signals (source_structure_id)"
                 )
             )
+        _add_columns(
+            connection,
+            inspector,
+            tables,
+            "candidate_stocks",
+            {
+                "first_selected_at": "DATETIME",
+                "last_selected_at": "DATETIME",
+                "candidate_age_days": "INTEGER DEFAULT 0",
+                "candidate_status": "VARCHAR(24) DEFAULT 'ACTIVE_TODAY'",
+                "carry_reason": "TEXT DEFAULT ''",
+                "dropped_reason": "TEXT DEFAULT ''",
+                "risk_flags_json": "TEXT DEFAULT '[]'",
+            },
+        )
+        _add_columns(
+            connection,
+            inspector,
+            tables,
+            "trade_plans",
+            {
+                "no_chase_above": "FLOAT",
+                "no_chase_below": "FLOAT",
+                "current_price": "FLOAT",
+                "current_change_pct": "FLOAT",
+                "last_validated_at": "DATETIME",
+                "rules_approval_status": "VARCHAR(40) DEFAULT 'NOT_REVIEWED'",
+                "rules_reject_reason": "TEXT DEFAULT ''",
+                "capital_status": "VARCHAR(32) DEFAULT 'CAPITAL_UNKNOWN'",
+                "capital_reason": "TEXT DEFAULT ''",
+                "activation_status": "VARCHAR(32) DEFAULT 'PLANNED'",
+                "waitlist_rank": "INTEGER",
+                "simulated_order_id": "INTEGER",
+                "missed_by_capital_at": "DATETIME",
+                "missed_by_capital_price": "FLOAT",
+                "suggested_shares": "INTEGER",
+                "available_cash_snapshot": "FLOAT",
+                "max_new_position_value": "FLOAT",
+                "manual_checklist_json": "TEXT DEFAULT '[]'",
+            },
+        )
+        _add_columns(
+            connection,
+            inspector,
+            tables,
+            "positions",
+            {
+                "source_trade_plan_id": "INTEGER",
+                "entry_order_id": "INTEGER",
+                "exit_order_id": "INTEGER",
+                "target_1": "FLOAT",
+                "target_2": "FLOAT",
+                "max_r": "FLOAT DEFAULT 0",
+                "min_r": "FLOAT DEFAULT 0",
+                "partial_exit_done": "BOOLEAN DEFAULT 0",
+                "trailing_stop_price": "FLOAT",
+                "overnight_policy": "VARCHAR(24) DEFAULT 'INTRADAY_ONLY'",
+            },
+        )
+
+
+def _add_columns(connection, inspector, tables, table: str, additions: dict[str, str]) -> None:
+    if table not in tables:
+        return
+    existing = {column["name"] for column in inspector.get_columns(table)}
+    for column, sql_type in additions.items():
+        if column not in existing:
+            connection.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {sql_type}"))
 
 
 def get_session() -> Generator[Session, None, None]:

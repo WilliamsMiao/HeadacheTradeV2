@@ -60,7 +60,23 @@ def generate_trade_plans(session: Session) -> dict[str, int]:
         plan.status = "ACTIVE"
         generated += 1
 
-    for plan in session.scalars(select(TradePlan).where(TradePlan.status == "ACTIVE")):
+    for plan in session.scalars(
+        select(TradePlan).where(
+            TradePlan.status.in_(
+                {
+                    "PLANNED",
+                    "ACTIVE",
+                    "ARMED",
+                    "WAIT_PULLBACK",
+                    "NO_CHASE",
+                    "TRIGGERED",
+                    "WAITLIST",
+                    "MISSED_BY_CAPITAL",
+                    "PAUSED",
+                }
+            )
+        )
+    ):
         if (plan.symbol, plan.source_structure_id) not in active_keys:
             plan.status = "INVALIDATED"
             plan.invalid_condition = f"{plan.invalid_condition}；对应结构已不在 S/A 级重点作战池"
@@ -145,6 +161,19 @@ def build_trade_plan_values(
         "invalid_condition": invalid_condition,
         "risk_reward_1": 1.5,
         "risk_reward_2": 2.0,
+        "no_chase_above": round(entry + 0.5 * atr, 4) if item.direction == "LONG" else None,
+        "no_chase_below": round(entry - 0.5 * atr, 4) if item.direction != "LONG" else None,
+        "activation_status": "PLANNED",
+        "manual_checklist_json": json.dumps(
+            [
+                "结构仍然有效",
+                "实时价格未超过禁止追价线",
+                "盘口价差符合限制",
+                "市场与资金闸门允许",
+                "无同标的持仓或未完成订单",
+            ],
+            ensure_ascii=False,
+        ),
         "reason": (
             f"{item.priority_level} 级重点作战；{item.reason}；"
             f"候选标签：{', '.join(tags) if tags else '无'}。计划只提供关键价位，必须人工复核。"

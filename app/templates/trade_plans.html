@@ -11,7 +11,7 @@
   {% for plan in plans %}
   <article class="trade-plan" id="plan-{{ plan.id }}">
     <header class="trade-plan-head">
-      <div><span class="priority priority-{{ plan.priority_level|lower }}">{{ plan.priority_level }}</span><h2>{{ plan.symbol }} · {{ plan.name }}</h2></div>
+      <div><span class="priority priority-{{ plan.priority_level|lower }}">{{ plan.priority_level }}</span><h2>{{ plan.symbol }} · {{ plan.name }}</h2><small>{{ plan.status|label }} · {{ plan.rules_approval_status|label }}</small></div>
       <div class="plan-status"><span class="state">{{ plan.direction|label }}</span><span class="state">{{ plan.alert_status|label }}</span></div>
     </header>
     <div class="plan-context">
@@ -32,7 +32,13 @@
       <div><strong>时间止损</strong><p>{{ plan.time_stop_rule }}</p></div>
       <div><strong>失效条件</strong><p>{{ plan.invalid_condition }}</p></div>
     </div>
-    <footer><p>{{ plan.reason }}</p><small>更新时间 {{ plan.updated_at|system_dt }}（香港时间）</small></footer>
+    <div class="plan-metrics">
+      <div><span>当前价</span><strong>{{ plan.current_price|price }}</strong></div>
+      <div><span>禁止追价线</span><strong>{{ plan.no_chase_above|price }}</strong></div>
+      <div><span>建议股数</span><strong>{{ plan.suggested_shares or "-" }}</strong></div>
+      <div><span>资金状态</span><strong>{{ plan.capital_status|label }}</strong></div>
+    </div>
+    <footer><p>{{ plan.rules_reject_reason or plan.reason }}</p><small>最后校验 {{ plan.last_validated_at|system_dt }} · 更新时间 {{ plan.updated_at|system_dt }}（香港时间）</small></footer>
   </article>
   {% else %}
   <div class="panel empty-page"><div class="empty"><strong>暂无有效交易计划</strong><span>先运行每日完整扫描。没有明确止损位的结构不会生成计划。</span></div></div>

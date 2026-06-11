@@ -53,10 +53,35 @@ python -m app.cli generate-trade-plans
 python -m app.cli set-price-alerts
 python -m app.cli run-daily
 python -m app.cli run-60m
+python -m app.cli run-sim-loop
 python -m app.cli run-backtest
 ```
 
 `--mock` 只用于测试和本地开发，不在生产 Web 页面暴露。
+
+## 自动模拟交易
+
+自动交易仅支持 Futu 美股模拟环境，代码中没有可调用的真实盘下单入口。`headachetrade-sim-loop.timer` 每 30 秒串行执行：同步模拟订单、管理持仓、更新资金状态、实时校验计划、规则审批和提交模拟限价单。
+
+核心生产配置：
+
+```dotenv
+ENABLE_SIM_TRADING=true
+ENABLE_REAL_TRADING=false
+ENABLE_AUTO_APPROVAL=true
+MAX_POSITIONS=1
+RISK_PER_TRADE_PCT=0.005
+MAX_SYMBOL_POSITION_PCT=0.4
+MAX_SPREAD_PCT=0.002
+MAX_DAILY_NEW_TRADES=3
+MAX_DAILY_LOSS_PCT=0.015
+MAX_CONSECUTIVE_LOSSES=3
+FORCE_INTRADAY_EXIT=true
+NO_NEW_ENTRY_BEFORE_MINUTES_AFTER_OPEN=60
+NO_NEW_ENTRY_BEFORE_CLOSE_MINUTES=30
+```
+
+任何 `ENABLE_REAL_TRADING=true` 配置都会在建立交易 Provider 前直接报错。
 
 ## 生产部署
 

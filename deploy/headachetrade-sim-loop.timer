@@ -1,0 +1,11 @@
+[Unit]
+Description=Run HeadacheTradeV2 simulated trading loop every 30 seconds
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=30s
+AccuracySec=1s
+Unit=headachetrade-sim-loop.service
+
+[Install]
+WantedBy=timers.target

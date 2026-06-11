@@ -162,6 +162,13 @@ class CandidateStock(Base, TimestampMixin):
     raw_metrics_json: Mapped[str] = mapped_column(Text, default="{}")
     active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     selected_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    first_selected_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_selected_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    candidate_age_days: Mapped[int] = mapped_column(Integer, default=0)
+    candidate_status: Mapped[str] = mapped_column(String(24), default="ACTIVE_TODAY", index=True)
+    carry_reason: Mapped[str] = mapped_column(Text, default="")
+    dropped_reason: Mapped[str] = mapped_column(Text, default="")
+    risk_flags_json: Mapped[str] = mapped_column(Text, default="[]")
 
 
 class CandidateSnapshot(Base, TimestampMixin):
@@ -223,6 +230,24 @@ class TradePlan(Base, TimestampMixin):
     alert_status: Mapped[str] = mapped_column(String(24), default="NOT_ARMED")
     status: Mapped[str] = mapped_column(String(24), default="ACTIVE", index=True)
     reason: Mapped[str] = mapped_column(Text)
+    no_chase_above: Mapped[float | None] = mapped_column(Float, nullable=True)
+    no_chase_below: Mapped[float | None] = mapped_column(Float, nullable=True)
+    current_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    current_change_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    last_validated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    rules_approval_status: Mapped[str] = mapped_column(String(40), default="NOT_REVIEWED", index=True)
+    rules_reject_reason: Mapped[str] = mapped_column(Text, default="")
+    capital_status: Mapped[str] = mapped_column(String(32), default="CAPITAL_UNKNOWN", index=True)
+    capital_reason: Mapped[str] = mapped_column(Text, default="")
+    activation_status: Mapped[str] = mapped_column(String(32), default="PLANNED")
+    waitlist_rank: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    simulated_order_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    missed_by_capital_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    missed_by_capital_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    suggested_shares: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    available_cash_snapshot: Mapped[float | None] = mapped_column(Float, nullable=True)
+    max_new_position_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    manual_checklist_json: Mapped[str] = mapped_column(Text, default="[]")
 
 
 class TradingState(Base, TimestampMixin):
@@ -304,7 +329,7 @@ class Position(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     symbol: Mapped[str] = mapped_column(String(32), unique=True, index=True)
     status: Mapped[str] = mapped_column(String(32), default="OPEN", index=True)
-    entry_signal_id: Mapped[int] = mapped_column(Integer, index=True)
+    entry_signal_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     entry_price: Mapped[float] = mapped_column(Float)
     stop_price: Mapped[float] = mapped_column(Float)
     trailing_stop: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -312,6 +337,64 @@ class Position(Base, TimestampMixin):
     risk_amount: Mapped[float] = mapped_column(Float)
     current_r: Mapped[float] = mapped_column(Float, default=0)
     exit_reason: Mapped[str] = mapped_column(Text, default="")
+    source_trade_plan_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    entry_order_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    exit_order_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    target_1: Mapped[float | None] = mapped_column(Float, nullable=True)
+    target_2: Mapped[float | None] = mapped_column(Float, nullable=True)
+    max_r: Mapped[float] = mapped_column(Float, default=0)
+    min_r: Mapped[float] = mapped_column(Float, default=0)
+    partial_exit_done: Mapped[bool] = mapped_column(Boolean, default=False)
+    trailing_stop_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    overnight_policy: Mapped[str] = mapped_column(String(24), default="INTRADAY_ONLY")
+
+
+class SimOrder(Base, TimestampMixin):
+    __tablename__ = "sim_orders"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    trade_plan_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    symbol: Mapped[str] = mapped_column(String(32), index=True)
+    side: Mapped[str] = mapped_column(String(8))
+    order_type: Mapped[str] = mapped_column(String(16), default="LIMIT")
+    qty: Mapped[int] = mapped_column(Integer)
+    limit_price: Mapped[float] = mapped_column(Float)
+    submitted_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    submitted_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    futu_order_id: Mapped[str] = mapped_column(String(64), default="", index=True)
+    trd_env: Mapped[str] = mapped_column(String(16), default="SIMULATE")
+    status: Mapped[str] = mapped_column(String(32), default="SUBMITTED", index=True)
+    reason: Mapped[str] = mapped_column(Text, default="")
+    raw_response_json: Mapped[str] = mapped_column(Text, default="{}")
+    dealt_qty: Mapped[int] = mapped_column(Integer, default=0)
+    dealt_avg_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
+class SimDeal(Base, TimestampMixin):
+    __tablename__ = "sim_deals"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    sim_order_id: Mapped[int] = mapped_column(Integer, index=True)
+    symbol: Mapped[str] = mapped_column(String(32), index=True)
+    side: Mapped[str] = mapped_column(String(8))
+    qty: Mapped[int] = mapped_column(Integer)
+    price: Mapped[float] = mapped_column(Float)
+    dealt_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    futu_deal_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    raw_json: Mapped[str] = mapped_column(Text, default="{}")
+
+
+class AuditLog(Base, TimestampMixin):
+    __tablename__ = "audit_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    action: Mapped[str] = mapped_column(String(64), index=True)
+    symbol: Mapped[str] = mapped_column(String(32), default="", index=True)
+    subject_type: Mapped[str] = mapped_column(String(32), default="")
+    subject_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    status: Mapped[str] = mapped_column(String(24), default="INFO")
+    reason: Mapped[str] = mapped_column(Text, default="")
+    payload_json: Mapped[str] = mapped_column(Text, default="{}")
 
 
 class ReviewStat(Base, TimestampMixin):

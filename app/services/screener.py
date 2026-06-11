@@ -45,8 +45,19 @@ def screen_market(
     )[:max_candidates]
     run_id = f"screen-{selected_at:%Y%m%d%H%M%S}-{uuid4().hex[:8]}"
 
+    selected_symbols = {item["symbol"] for item in ranked}
     for record in session.scalars(select(CandidateStock).where(CandidateStock.active.is_(True))):
-        record.active = False
+        if record.symbol not in selected_symbols:
+            age = (selected_at.date() - (record.last_selected_at or record.selected_at).date()).days
+            has_active_commitment = record.candidate_status in {"BATTLE_ACTIVE", "PLAN_ACTIVE", "IN_POSITION"}
+            if age <= 5 or has_active_commitment:
+                record.candidate_status = "CARRY_OVER"
+                record.carry_reason = "近 5 天候选或仍有结构、计划、持仓价值"
+                record.candidate_age_days = age
+            else:
+                record.active = False
+                record.candidate_status = "DROPPED"
+                record.dropped_reason = "连续超过 5 天未重新入选且无有效计划或持仓"
 
     for item in ranked:
         record = session.scalar(select(CandidateStock).where(CandidateStock.symbol == item["symbol"]))
@@ -69,6 +80,12 @@ def screen_market(
             setattr(record, field_name, item[field_name])
         record.active = True
         record.selected_at = selected_at
+        record.first_selected_at = record.first_selected_at or selected_at
+        record.last_selected_at = selected_at
+        record.candidate_age_days = (selected_at.date() - record.first_selected_at.date()).days
+        record.candidate_status = "ACTIVE_TODAY"
+        record.carry_reason = ""
+        record.dropped_reason = ""
         session.add(
             CandidateSnapshot(
                 run_id=run_id,

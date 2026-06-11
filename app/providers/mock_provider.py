@@ -31,6 +31,22 @@ class MockProvider(MarketDataProvider):
             )
         return rows
 
+    def get_market_snapshot(self, symbols: list[str]) -> list[dict[str, object]]:
+        return [
+            {
+                "code": f"US.{symbol.removeprefix('US.')}",
+                "last_price": 120.0,
+                "bid_price": 119.95,
+                "ask_price": 120.0,
+                "volume": 1_000_000,
+                "change_rate": 1.2,
+            }
+            for symbol in symbols
+        ]
+
+    def close(self) -> None:
+        pass
+
     def get_klines(self, symbol: str, timeframe: str, start: datetime | None = None, end: datetime | None = None) -> list[Bar]:
         if timeframe not in SUPPORTED_TIMEFRAMES:
             raise ValueError(f"unsupported mock timeframe: {timeframe}")

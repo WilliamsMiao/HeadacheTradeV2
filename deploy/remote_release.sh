@@ -99,9 +99,19 @@ install -m 0644 deploy/headachetrade-daily.service /etc/systemd/system/headachet
 install -m 0644 deploy/headachetrade-daily.timer /etc/systemd/system/headachetrade-daily.timer
 install -m 0644 deploy/headachetrade-60m.service /etc/systemd/system/headachetrade-60m.service
 install -m 0644 deploy/headachetrade-60m.timer /etc/systemd/system/headachetrade-60m.timer
+install -m 0644 deploy/headachetrade-sim-loop.service /etc/systemd/system/headachetrade-sim-loop.service
+install -m 0644 deploy/headachetrade-sim-loop.timer /etc/systemd/system/headachetrade-sim-loop.timer
 systemctl daemon-reload
 systemctl enable "${SERVICE_NAME}"
 systemctl enable --now headachetrade-daily.timer headachetrade-60m.timer
+if ! grep -q '^ENABLE_SIM_TRADING=' "${ENV_DIR}/headachetrade.env"; then
+  printf '\nENABLE_SIM_TRADING=true\nENABLE_REAL_TRADING=false\n' >>"${ENV_DIR}/headachetrade.env"
+fi
+if grep -Eq '^ENABLE_SIM_TRADING=(true|1|yes)$' "${ENV_DIR}/headachetrade.env"; then
+  systemctl enable --now headachetrade-sim-loop.timer
+else
+  systemctl disable --now headachetrade-sim-loop.timer || true
+fi
 if ! systemctl restart "${SERVICE_NAME}"; then
   if [[ -n "${previous_release}" && -d "${previous_release}" ]]; then
     ln -sfn "${previous_release}" "${CURRENT_LINK}"
