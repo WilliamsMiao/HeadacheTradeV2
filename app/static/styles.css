@@ -1234,6 +1234,20 @@ td a + small {
   font-weight: 650;
 }
 
+.live-price-status {
+  display: block;
+  margin-top: var(--space-1);
+  color: var(--color-text-muted);
+}
+
+.live-price-status[data-tone="success"] {
+  color: var(--color-success);
+}
+
+.live-price-status[data-tone="error"] {
+  color: var(--color-danger);
+}
+
 .blocked-list {
   display: grid;
   border: 1px solid var(--color-border);

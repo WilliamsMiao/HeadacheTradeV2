@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <header class="page-header compact">
-  <div><h1>交易计划执行台</h1><p>这里回答系统准备交易什么、卡在哪一步、为什么没有下单，以及下一步会做什么。</p></div>
+  <div><h1>交易计划执行台</h1><p>这里回答系统准备交易什么、卡在哪一步、为什么没有下单，以及下一步会做什么。</p><small class="live-price-status" data-live-price-status>正在连接 OpenD 获取实时价</small></div>
   <div class="header-actions toolbar"><button data-task="run-pipeline" data-loading-text="正在生成">刷新交易计划</button><button class="secondary" data-task="set-price-alerts" data-loading-text="正在同步">同步到价提醒</button></div>
 </header>
 {% for group in groups %}
@@ -16,7 +16,7 @@
         <div class="plan-status"><strong>{{ item.status.display_name }}</strong><small>{{ item.status.description }}</small></div>
       </header>
       <dl class="plan-levels compact-levels">
-        <div><dt>当前价</dt><dd>{{ plan.current_price|price }}</dd></div>
+        <div><dt>当前价</dt><dd data-live-price="{{ plan.symbol }}">{{ plan.current_price|price if plan.current_price else "获取中" }}</dd></div>
         <div class="primary-level"><dt>关键触发价</dt><dd>{{ plan.breakout_entry_price|price }}</dd></div>
         <div><dt>禁止追价</dt><dd>{{ plan.no_chase_above|price }}</dd></div>
         <div class="danger-level"><dt>硬止损</dt><dd>{{ plan.stop_price|price }}</dd></div>

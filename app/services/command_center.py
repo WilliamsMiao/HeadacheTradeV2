@@ -17,6 +17,7 @@ def command_center_payload(session: Session, settings: Settings) -> dict:
     plans = list(session.scalars(select(TradePlan).order_by(TradePlan.updated_at.desc())))
     positions = list(session.scalars(select(Position).where(Position.status == "OPEN").order_by(Position.updated_at.desc())))
     executable = [_plan_view(plan) for plan in plans if plan.priority_level in {"S", "A"} and plan.status in EXECUTABLE]
+    executable.sort(key=lambda item: (_priority_rank(item["record"].priority_level), -item["record"].updated_at.timestamp()))
     blocked = [_plan_view(plan) for plan in plans if plan.status in BLOCKED or plan.rules_approval_status.startswith("REJECTED")]
     logs = list(session.scalars(select(AuditLog).order_by(AuditLog.created_at.desc()).limit(20)))
     funnel = {
@@ -67,3 +68,7 @@ def _plan_view(plan: TradePlan) -> dict:
         "next_action": describe_trade_plan_next_action(plan),
         "reason": plan.rules_reject_reason or plan.capital_reason or plan.reason,
     }
+
+
+def _priority_rank(priority_level: str) -> int:
+    return {"S": 0, "A": 1, "B": 2, "C": 3}.get(priority_level, 4)
