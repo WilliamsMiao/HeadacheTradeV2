@@ -193,6 +193,19 @@ async function refreshLivePlanPrices() {
         node.textContent = Number(price).toFixed(2);
       }
     });
+    const changedGate = [...document.querySelectorAll("[data-plan-symbol]")].some((card) => {
+      const price = Number(payload.prices?.[card.dataset.planSymbol] || 0);
+      const entry = Number(card.dataset.entryPrice || 0);
+      const noChase = Number(card.dataset.noChaseAbove || 0);
+      const priceReady = price > 0 && entry > 0 && price >= entry && (!noChase || price <= noChase);
+      const statusChanged = payload.statuses?.[card.dataset.planSymbol]
+        && payload.statuses[card.dataset.planSymbol] !== card.dataset.planStatus;
+      return String(priceReady) !== card.dataset.priceReady || statusChanged;
+    });
+    if (changedGate) {
+      window.location.reload();
+      return;
+    }
     const updatedAt = payload.updated_at
       ? new Intl.DateTimeFormat("zh-CN", {hour: "2-digit", minute: "2-digit", second: "2-digit"}).format(new Date(payload.updated_at))
       : "刚刚";
