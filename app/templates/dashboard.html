@@ -2,108 +2,55 @@
 {% block content %}
 <header class="page-header">
   <div>
-    <h1>结构趋势交易闭环</h1>
-    <p>结构负责观察，趋势负责方向，触发负责入场，风控负责生存，退出负责兑现。</p>
+    <h1>日线 + 60 分钟结构监控</h1>
+    <p>从全市场候选池中筛选结构事件，聚焦少量重点标的，并生成可执行、可复盘的交易计划。</p>
   </div>
-  <section class="market-tile {{ market.state|css_class if market else 'market-risk-off' }}">
-    <span>市场环境</span>
-    <strong>{{ market.state|label if market else "未计算" }}</strong>
-    <small>
-      {{ market.state|market_reason_desc(market.reason) if market else "接入 Futu OpenD 并运行闭环后生成市场状态" }}
-    </small>
-  </section>
+  <a class="market-tile {{ market.state|css_class if market else 'market-unknown' }}" href="/market">
+    <span>市场风向标 · 仅供仓位参考</span>
+    <strong>{{ market.state|label if market else "尚未计算" }}</strong>
+    <small>{{ market.state|market_reason_desc(market.reason) if market else "运行每日扫描后生成市场环境说明" }}</small>
+  </a>
 </header>
 
-{% if market %}
-<details class="market-detail-panel" {% if market.state == "RISK_OFF" %}open{% endif %}>
-  <summary>
-    <span>
-      <strong>为什么是“{{ market.state|label }}”</strong>
-      <small>基于 SPY + QQQ 的长期趋势与动能过滤，数据日期 {{ market.as_of|dt }}</small>
-    </span>
-    <span class="detail-toggle">查看判定明细</span>
-  </summary>
-  <div class="market-detail-body">
-    <p class="market-conclusion">{{ market.state|market_reason_desc(market.reason) }}</p>
-    <div class="market-check-grid">
-      {% for check in market_checks %}
-      <article class="market-check">
-        <header>
-          <strong>{{ check.symbol }}</strong>
-          <span class="state {{ 'state-success' if check.passed else ('state-warning' if not check.ready else 'state-danger') }}">
-            {{ "通过过滤" if check.passed else ("数据不完整" if not check.ready else "未通过过滤") }}
-          </span>
-        </header>
-        {% if check.ready %}
-        <dl>
-          <div><dt>收盘价</dt><dd>{{ check.close|price }}</dd></div>
-          <div><dt>MA20</dt><dd>{{ check.ma20|price }}</dd></div>
-          <div><dt>MA60</dt><dd>{{ check.ma60|price }}</dd></div>
-          <div><dt>MACD DIF</dt><dd>{{ "%.3f"|format(check.macd_dif) }}</dd></div>
-        </dl>
-        <ul class="condition-list">
-          <li class="{{ 'passed' if check.above_ma60 else 'failed' }}">
-            {{ "通过" if check.above_ma60 else "未通过" }}：收盘价高于 MA60
-          </li>
-          <li class="{{ 'passed' if check.ma_bullish else 'failed' }}">
-            {{ "通过" if check.ma_bullish else "未通过" }}：MA20 不低于 MA60
-          </li>
-          <li class="{{ 'passed' if check.momentum_ok else 'failed' }}">
-            {{ "通过" if check.momentum_ok else "未通过" }}：MACD 非弱势或价格守住 MA20
-          </li>
-        </ul>
-        {% else %}
-        <p class="data-issue">{{ check.reason|reason }}</p>
-        <small>请先更新行情并计算指标，再刷新状态机。</small>
-        {% endif %}
-      </article>
-      {% endfor %}
-    </div>
-    <p class="market-rule">
-      判定规则：两个基准均通过为“风险偏好”；任一通过为“中性偏强”；两个均未通过或任一数据不完整时，关闭新开仓。
-    </p>
-  </div>
-</details>
-{% endif %}
-
 <section class="summary-grid">
-  <article class="summary-card">
-    <span>自选股</span>
-    <strong>{{ summary.watchlist }}</strong>
-    <small>来自 Futu OpenD</small>
-  </article>
-  <article class="summary-card">
-    <span>待审批</span>
-    <strong>{{ summary.pending_signals }}</strong>
-    <small>需要人工确认</small>
-  </article>
+  <a class="summary-card" href="/candidates">
+    <span>候选标的</span>
+    <strong>{{ summary.candidate_count }}</strong>
+    <small>四类池合并去重，上限 300 支</small>
+  </a>
+  <a class="summary-card" href="/battle-pool">
+    <span>重点作战池</span>
+    <strong>{{ summary.battle_count }}</strong>
+    <small>按结构质量分为 S / A / B / C</small>
+  </a>
+  <a class="summary-card" href="/trade-plans">
+    <span>有效交易计划</span>
+    <strong>{{ summary.plan_count }}</strong>
+    <small>仅 S/A 级且止损清晰时生成</small>
+  </a>
   <article class="summary-card">
     <span>模拟持仓</span>
     <strong>{{ summary.open_positions }}</strong>
-    <small>仅模拟，不实盘</small>
-  </article>
-  <article class="summary-card risk">
-    <span>风险事项</span>
-    <strong>{{ summary.risk_items }}</strong>
-    <small>风险保护或退出候选</small>
+    <small>计划到价后仍需人工复核</small>
   </article>
 </section>
 
 <section class="panel">
   <div class="task-bar">
     <div class="task-bar-copy">
-      <h2>数据任务</h2>
-      <small>按顺序完成数据同步、指标计算与状态刷新。</small>
+      <h2>系统任务</h2>
+      <small>每日完整扫描用于重建候选池；盘中扫描只刷新核心 K 线、结构、评级与计划。</small>
     </div>
-    <div class="task-bar-actions" aria-label="数据任务">
-      <button data-task="sync-watchlist" data-loading-text="正在同步">同步自选股</button>
-      <button class="secondary" data-task="update-market-data" data-loading-text="正在更新">更新行情</button>
+    <div class="task-bar-actions" aria-label="系统任务">
+      <button data-task="run-daily" data-loading-text="正在扫描">运行每日完整扫描</button>
+      <button class="secondary" data-task="run-60m" data-loading-text="正在刷新">刷新 60 分钟监控</button>
       <details class="action-menu">
         <summary>更多任务</summary>
         <div class="action-menu-content">
-          <button data-task="compute-indicators" data-loading-text="正在计算">计算指标</button>
-          <button data-task="run-pipeline" data-loading-text="正在刷新">刷新状态机</button>
-          <button data-task="run-backtest" data-loading-text="正在生成">生成复盘</button>
+          <button data-task="screen-market" data-loading-text="正在选股">仅更新候选池</button>
+          <button data-task="update-market-data" data-loading-text="正在更新">仅更新核心行情</button>
+          <button data-task="compute-indicators" data-loading-text="正在计算">重新计算指标</button>
+          <button data-task="run-pipeline" data-loading-text="正在生成">重新生成评级与计划</button>
         </div>
       </details>
     </div>
@@ -118,143 +65,88 @@
     </div>
     <span data-task-progress-value>0%</span>
   </div>
-  <div class="panel-head">
-    <div class="panel-head-copy">
-      <h2>主看板</h2>
-      <span>评分仅用于排序展示，不参与状态转换或交易触发。</span>
+</section>
+
+<section class="grid two dashboard-focus-grid">
+  <div class="panel">
+    <div class="panel-head">
+      <div class="panel-head-copy"><h2>重点作战标的</h2><span>每天优先认真查看最靠前的 1 至 3 支</span></div>
+      <a class="text-link" href="/battle-pool">查看全部</a>
     </div>
-    <small>{{ summary.watchlist }} 只股票</small>
+    <div class="compact-list">
+      {% for item in battle_items %}
+      <a class="compact-row" href="/symbols/{{ item.symbol }}">
+        <span class="priority priority-{{ item.priority_level|lower }}">{{ item.priority_level }}</span>
+        <span class="compact-row-main">
+          <strong>{{ item.symbol }} · {{ item.direction|label }}</strong>
+          <small>{{ item.daily_state|label }} · {{ item.structure_type|label }}</small>
+        </span>
+        <span class="compact-row-value">{{ "%.1f"|format(item.score) }}</span>
+      </a>
+      {% else %}
+      <div class="empty">
+        <strong>尚无重点作战标的</strong>
+        <span>运行每日完整扫描后，系统会从结构事件中进行评级。</span>
+      </div>
+      {% endfor %}
+    </div>
   </div>
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th>代码</th>
-          <th>趋势 / 状态</th>
-          <th>最新结构</th>
-          <th>动作</th>
-          <th>风控</th>
-          <th>下一步</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for row in rows %}
-        <tr>
-          <td class="symbol-cell">
-            <a href="/symbols/{{ row.item.symbol }}">{{ row.item.symbol }}</a>
-            <small>{{ row.item.name }}</small>
-          </td>
-          <td>
-            <span class="state {{ 'state-warning' if not row.data_ok else 'state-soft' }}">
-              {{ row.trend.trend|label if row.data_ok and row.trend else ("数据待修复" if not row.data_ok else "数据不足") }}
-            </span>
-            <span class="state">{{ row.state.state|label if row.state else "空闲观察" }}</span>
-          </td>
-          <td>
-            {% if row.structure %}
-              <span class="state structure">{{ row.structure.event_type|label }}</span>
-              <small>{{ row.structure.event_ts|dt }}</small>
-            {% else %}-{% endif %}
-          </td>
-          <td>{{ row.signal.action if row.signal else ("持仓管理" if row.position else "观察") }}</td>
-          <td class="risk-cell">
-            {% if row.signal %}
-            <strong>止损 {{ row.signal.stop_price|price }}</strong>
-            <small>{{ row.signal.shares|shares }} · 仓位 {{ row.signal.target_position_pct|percent }}</small>
-            {% elif row.position %}
-            <strong>止损 {{ row.position.stop_price|price }}</strong>
-            <small>{{ row.position.shares|shares }} · {{ "%.2f"|format(row.position.current_r) }}R</small>
-            {% else %}-{% endif %}
-          </td>
-          <td>
-            <p class="reason-short" title="{{ (row.signal.reason if row.signal else (row.state.last_reason if row.state else ''))|reason }}">
-              {{ (row.data_reason if not row.data_ok else (row.signal.reason if row.signal else (row.state.last_reason if row.state else "等待趋势过滤")))|reason(72) }}
-            </p>
-            <small>
-              {{ "更新行情 → 计算指标 → 刷新状态机" if not row.data_ok else (row.state.next_wait|reason(56) if row.state else "等待趋势过滤") }}
-            </small>
-          </td>
-        </tr>
-        {% else %}
-        <tr>
-          <td colspan="6">
-            <div class="empty">
-              <strong>尚未同步自选股</strong>
-              <span>先确认 OpenD 已登录，再使用上方“同步自选股”。</span>
-            </div>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+
+  <div class="panel">
+    <div class="panel-head">
+      <div class="panel-head-copy"><h2>交易计划</h2><span>计划不是买卖指令，到价后仍需人工复核</span></div>
+      <a class="text-link" href="/trade-plans">查看全部</a>
+    </div>
+    <div class="compact-list">
+      {% for plan in plans %}
+      <a class="compact-row" href="/trade-plans#plan-{{ plan.id }}">
+        <span class="priority priority-{{ plan.priority_level|lower }}">{{ plan.priority_level }}</span>
+        <span class="compact-row-main">
+          <strong>{{ plan.symbol }} · {{ plan.direction|label }}</strong>
+          <small>触发 {{ plan.breakout_entry_price|price }} · 止损 {{ plan.stop_price|price }}</small>
+        </span>
+        <span class="compact-row-value">{{ plan.risk_reward_2 }}R</span>
+      </a>
+      {% else %}
+      <div class="empty">
+        <strong>尚无有效交易计划</strong>
+        <span>只有 S/A 级结构且存在明确止损位时才会生成计划。</span>
+      </div>
+      {% endfor %}
+    </div>
   </div>
 </section>
 
-<section class="grid two">
-  <div class="panel">
-    <div class="panel-head"><h2>待审批建议</h2><span>批准后才进入模拟持仓</span></div>
-    {% for signal in signals %}
-    <article class="signal">
-      <header>
-        <div>
-          <strong>{{ signal.symbol }} · {{ signal.action }}</strong>
-          <small>{{ (signal.script or signal.signal_type)|script_desc }}</small>
-        </div>
-        <span class="state pending">{{ signal.status|label }}</span>
-      </header>
-      <p title="{{ signal.reason|reason }}">{{ signal.reason|reason }}</p>
-      {% if signal.source_structure_id %}
-      <div class="signal-source">
-        <span>60 分钟结构 #{{ signal.source_structure_id }}</span>
-        <span>{{ signal.trigger_timeframe|label }}触发 {{ signal.trigger_ts|dt }}</span>
-        <span>突破参考 {{ signal.trigger_level|price }}</span>
-      </div>
-      {% endif %}
-      <dl class="metric-grid">
-        <div><dt>建议入场</dt><dd>{{ signal.entry_price|price }}</dd></div>
-        <div><dt>初始止损</dt><dd>{{ signal.stop_price|price }}</dd></div>
-        <div><dt>建议股数</dt><dd>{{ signal.shares|shares }}</dd></div>
-        <div><dt>仓位占比</dt><dd>{{ signal.target_position_pct|percent }}</dd></div>
-        <div><dt>实际风险</dt><dd>{{ signal.risk_amount|money }}</dd></div>
-        <div><dt>允许亏损</dt><dd>{{ signal.allowed_loss|money }}</dd></div>
-        <div><dt>每股风险</dt><dd>{{ signal.risk_per_share|money }}</dd></div>
-        <div><dt>建议市值</dt><dd>{{ signal.position_value|money }}</dd></div>
-        <div><dt>展示评分</dt><dd>{{ signal.score_display or "-" }}</dd></div>
-      </dl>
-      <footer>
-        <button data-approve="{{ signal.id }}" data-loading-text="正在批准">批准建议</button>
-        <button data-reject="{{ signal.id }}" data-loading-text="正在拒绝" class="danger">拒绝建议</button>
-      </footer>
-    </article>
-    {% else %}
-    <div class="empty">
-      <strong>暂无待审批建议</strong>
-      <span>状态机生成满足趋势、结构和风控条件的候选后，会在这里等待人工确认。</span>
-    </div>
-    {% endfor %}
+<section class="panel">
+  <div class="panel-head">
+    <div class="panel-head-copy"><h2>候选池前列</h2><span>评分仅用于候选排序和解释，不直接触发交易</span></div>
+    <a class="text-link" href="/candidates">查看 300 支候选池</a>
   </div>
-
-  <div class="panel">
-    <div class="panel-head"><h2>模拟持仓与复盘</h2><span>只模拟，不实盘下单</span></div>
-    {% for position in positions %}
-    <article class="position">
-      <strong>{{ position.symbol }}</strong>
-      <span>{{ position.shares|shares }}</span>
-      <span>成本 {{ position.entry_price|price }}</span>
-      <span>止损 {{ position.stop_price|price }}</span>
-      <span>{{ "%.2f"|format(position.current_r) }}R</span>
-    </article>
-    {% else %}
-    <div class="empty">
-      <strong>暂无模拟持仓</strong>
-      <span>批准入场建议后，模拟持仓和止损信息会显示在这里。</span>
-    </div>
-    {% endfor %}
-    <div class="stats">
-      {% for stat in reviews %}
-      <span>{{ stat.metric|label }}: {{ "%.2f"|format(stat.value) }}</span>
-      {% else %}<span>运行回测后显示系统统计。</span>{% endfor %}
-    </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>股票</th><th>候选池</th><th>技术标签</th><th>排序分</th><th>入池原因</th></tr></thead>
+      <tbody>
+        {% for item in candidates %}
+        <tr>
+          <td class="symbol-cell"><a href="/symbols/{{ item.symbol }}">{{ item.symbol }}</a><small>{{ item.name }}</small></td>
+          <td>
+            {% for pool in item.pool_types_json|json_list %}
+            <span class="state">{{ pool|label }}</span>
+            {% endfor %}
+          </td>
+          <td class="tag-cell">
+            {% for tag in item.tags_json|json_list %}
+            <span class="tag">{{ tag|label }}</span>
+            {% endfor %}
+          </td>
+          <td><strong>{{ "%.1f"|format(item.rank_score) }}</strong></td>
+          <td><p class="reason-short">{{ item.selected_reason }}</p></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5"><div class="empty"><strong>候选池为空</strong><span>确认 OpenD 已连接后运行每日完整扫描。</span></div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
 </section>
 {% endblock %}

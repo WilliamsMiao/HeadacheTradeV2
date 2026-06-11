@@ -4,7 +4,7 @@
   <div>
     <h1>{{ item.symbol }} <span>{{ item.name }}</span></h1>
     <p>
-      {{ trend.trend|label if trend else "数据不足" }}
+      {{ daily_state.state|label if daily_state else "数据不足" }}
       · {{ state.state|label if state else "空闲观察" }}
       · {{ state.next_wait|reason if state else "等待初始化" }}
     </p>
@@ -17,6 +17,23 @@
   </section>
   {% endif %}
 </header>
+
+{% if plan %}
+<section class="panel symbol-plan-summary">
+  <div class="panel-head">
+    <div class="panel-head-copy"><h2>当前交易计划</h2><span>{{ plan.priority_level }} 级 · {{ plan.direction|label }} · {{ plan.entry_mode|label }}</span></div>
+    <a class="text-link" href="/trade-plans#plan-{{ plan.id }}">查看完整计划</a>
+  </div>
+  <dl class="metric-grid">
+    <div><dt>关键触发价</dt><dd>{{ plan.breakout_entry_price|price }}</dd></div>
+    <div><dt>回踩区</dt><dd>{{ plan.pullback_entry_low|price }} – {{ plan.pullback_entry_high|price }}</dd></div>
+    <div><dt>硬止损</dt><dd>{{ plan.stop_price|price }}</dd></div>
+    <div><dt>第一目标</dt><dd>{{ plan.target_1|price }}</dd></div>
+    <div><dt>第二目标</dt><dd>{{ plan.target_2|price }}</dd></div>
+    <div><dt>提醒状态</dt><dd>{{ plan.alert_status|label }}</dd></div>
+  </dl>
+</section>
+{% endif %}
 
 <section class="grid two">
   <div class="panel">
@@ -42,7 +59,7 @@
     {% else %}
     <div class="empty">
       <strong>暂无结构事件</strong>
-      <span>更新行情并运行状态机后，这里会记录底部与顶部结构历史。</span>
+      <span>更新核心行情并扫描结构后，这里会记录底部与顶部结构历史。</span>
     </div>
     {% endfor %}
   </div>
@@ -94,19 +111,23 @@
   <div class="panel-head"><h2>日线指标快照</h2><span>按时间顺序计算，无未来函数</span></div>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>时间</th><th>收盘价</th><th>20日均线</th><th>60日均线</th><th>DIF</th><th>DEA</th><th>MACD柱</th><th>ATR波动</th><th>20日量均</th></tr></thead>
+      <thead><tr><th>时间</th><th>收盘价</th><th>MA5</th><th>MA10</th><th>MA20</th><th>MA60</th><th>BOLL 中轨</th><th>RSI14</th><th>KDJ J</th><th>DIF</th><th>MACD 柱</th><th>ATR</th><th>量比</th></tr></thead>
       <tbody>
         {% for k in klines[:20] %}
         {% set ind = indicators|selectattr("ts", "equalto", k.ts)|first %}
         <tr>
           <td>{{ k.ts|dt }}</td><td>{{ k.close|price }}</td>
+          <td>{{ ind.ma5|price if ind else "-" }}</td>
+          <td>{{ ind.ma10|price if ind else "-" }}</td>
           <td>{{ ind.ma20|price if ind else "-" }}</td>
           <td>{{ ind.ma60|price if ind else "-" }}</td>
+          <td>{{ ind.boll_mid|price if ind else "-" }}</td>
+          <td>{{ ind.rsi14|price if ind else "-" }}</td>
+          <td>{{ ind.kdj_j|price if ind else "-" }}</td>
           <td>{{ ind.macd_dif|price if ind else "-" }}</td>
-          <td>{{ ind.macd_dea|price if ind else "-" }}</td>
           <td>{{ ind.macd_hist|price if ind else "-" }}</td>
           <td>{{ ind.atr|price if ind else "-" }}</td>
-          <td>{{ "%.0f"|format(ind.volume_ma20 or 0) if ind else "-" }}</td>
+          <td>{{ ind.volume_ratio|price if ind else "-" }}</td>
         </tr>
         {% endfor %}
       </tbody>

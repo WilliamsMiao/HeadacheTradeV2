@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import json
 from datetime import date, datetime
 from typing import Any
 
@@ -19,7 +20,20 @@ LABELS: dict[str, str] = {
     "SIDEWAYS": "震荡观察",
     "DOWNTREND": "下跌趋势",
     "UNKNOWN": "数据不足",
+    "DAILY_STRONG_BULL": "日线强多头",
+    "DAILY_WEAK_BULL": "日线弱多头",
+    "DAILY_RANGE": "日线震荡",
+    "DAILY_WEAK_BEAR": "日线弱空头",
+    "DAILY_STRONG_BEAR": "日线强空头",
     "IDLE": "空闲观察",
+    "CANDIDATE_POOL": "候选池观察",
+    "STRUCTURE_DETECTED": "已识别结构",
+    "BATTLE_WATCH": "重点作战观察",
+    "PLAN_READY": "交易计划已生成",
+    "PRICE_ALERT_ARMED": "到价提醒已设置",
+    "ENTRY_REVIEW": "等待入场复核",
+    "SIM_POSITION": "模拟持仓",
+    "EXIT_REVIEW": "等待退出复核",
     "TREND_OK": "趋势合格",
     "WATCH_BOTTOM": "底部观察",
     "BOTTOM_CONFIRMED": "底结构确认",
@@ -36,6 +50,38 @@ LABELS: dict[str, str] = {
     "TOP_PASSIVATION": "顶钝化",
     "TOP_STRUCTURE": "顶结构",
     "TOP_INVALIDATED": "顶结构失效",
+    "LOW_REBOUND": "低位反弹池",
+    "TREND_UP": "趋势上行池",
+    "HIGH_RISK": "高位风险池",
+    "WEAK_DOWN": "弱势下行池",
+    "MACD_LOW_IMPROVING": "MACD 低位改善",
+    "KDJ_LOW_GOLD_CROSS": "KDJ 低位金叉",
+    "KDJ_BOTTOM_DIVERGENCE": "KDJ 底背离候选",
+    "BOLL_CROSS_MIDDLE_UP": "BOLL 升穿中轨",
+    "MA_ALIGNMENT_LONG": "均线多头排列",
+    "EMA_ALIGNMENT_LONG": "指数均线多头排列",
+    "BOLL_BREAK_UPPER": "BOLL 突破上轨",
+    "MACD_DEATH_CROSS_HIGH": "MACD 高位死叉",
+    "MACD_TOP_DIVERGENCE": "MACD 顶背离候选",
+    "KDJ_DEATH_CROSS_HIGH": "KDJ 高位死叉",
+    "RSI_TOP_DIVERGENCE": "RSI 顶背离候选",
+    "MA_ALIGNMENT_SHORT": "均线空头排列",
+    "EMA_ALIGNMENT_SHORT": "指数均线空头排列",
+    "BOLL_CROSS_MIDDLE_DOWN": "BOLL 跌穿中轨",
+    "LONG": "做多观察",
+    "SHORT": "下行观察",
+    "RISK": "风险观察",
+    "PASSIVATION": "钝化阶段",
+    "CONFIRMED": "结构确认",
+    "FAILED": "结构失败",
+    "INVALIDATED": "结构失效",
+    "BREAKOUT": "突破入场复核",
+    "BREAKOUT_OR_PULLBACK": "突破或回踩复核",
+    "BREAKDOWN_REVIEW": "跌破复核",
+    "NOT_ARMED": "未设置提醒",
+    "ARMED": "提醒已设置",
+    "ACTIVE": "有效",
+    "ARCHIVED": "已归档",
     "TREND_RECOVERY": "趋势恢复",
     "TREND_BREAK": "趋势破坏",
     "BUY": "买入",
@@ -173,6 +219,36 @@ def format_reason(text: Any, limit: int | None = None) -> str:
     result = str(text)
     for source, target in REASON_REPLACEMENTS:
         result = result.replace(source, target)
+    result = re.sub(
+        r"price near stage low ([0-9.]+) while MACD DIF holds a higher low and histogram improves",
+        r"价格接近阶段低点 \1，DIF 未同步破低且 MACD 柱改善",
+        result,
+    )
+    result = re.sub(
+        r"price near stage high ([0-9.]+) while MACD DIF fails to confirm and histogram weakens",
+        r"价格接近阶段高点 \1，DIF 未同步创新高且 MACD 柱走弱",
+        result,
+    )
+    result = re.sub(
+        r"bottom passivation confirmed above ([0-9.]+); pivot low ([0-9.]+); MA20 recovered, MACD improved, and volume accepted",
+        r"底钝化后收盘突破确认位 \1；结构低点 \2；已收复 MA20，MACD 与量能确认",
+        result,
+    )
+    result = re.sub(
+        r"top passivation confirmed below ([0-9.]+); pivot high ([0-9.]+); MACD weakening continued",
+        r"顶钝化后跌破确认位 \1；结构高点 \2；MACD 继续走弱",
+        result,
+    )
+    result = re.sub(
+        r"bottom structure failed below invalidation ([0-9.]+) with renewed MACD histogram deterioration",
+        r"底结构跌破失效位 \1，MACD 柱重新恶化",
+        result,
+    )
+    result = re.sub(
+        r"top structure invalidated above ([0-9.]+) while price held above MA20",
+        r"价格突破顶结构失效位 \1 且守住 MA20，顶结构失效",
+        result,
+    )
     result = re.sub(r"\bmarket state ([A-Z_]+) forbids new entries\b", lambda m: f"市场状态“{label_for(m.group(1))}”禁止新开仓", result)
     result = re.sub(
         r"\bmarket state ([A-Z_]+) downgraded while position is open\b",
@@ -258,6 +334,14 @@ def format_return(value: Any) -> str:
     except (TypeError, ValueError):
         return "-"
     return f"{number * 100:+.1f}%"
+
+
+def json_list(value: Any) -> list[str]:
+    try:
+        parsed = json.loads(str(value or "[]"))
+        return [str(item) for item in parsed] if isinstance(parsed, list) else []
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return []
 
 
 def format_datetime(value: Any) -> str:

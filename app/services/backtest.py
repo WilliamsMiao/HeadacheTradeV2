@@ -387,7 +387,7 @@ def _source_bars(session: Session, symbols: list[str], end: datetime | None) -> 
         select(KLine)
         .where(
             KLine.symbol.in_(symbols),
-            KLine.timeframe.in_(CORE_TIMEFRAMES),
+            KLine.timeframe.in_((*CORE_TIMEFRAMES, TRIGGER_TIMEFRAME)),
             KLine.data_ok.is_(True),
         )
         .order_by(KLine.ts.asc(), KLine.symbol.asc(), KLine.timeframe.asc())

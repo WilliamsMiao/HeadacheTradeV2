@@ -50,6 +50,11 @@ def _migrate_sqlite_schema(target_engine=engine) -> None:
                 "parent_event_id": "INTEGER",
                 "expires_at": "DATETIME",
                 "script_version": "VARCHAR(64)",
+                "direction": "VARCHAR(16) DEFAULT ''",
+                "stage": "VARCHAR(24) DEFAULT ''",
+                "quality_score": "FLOAT",
+                "battle_eligible": "BOOLEAN DEFAULT 0",
+                "suggested_action": "VARCHAR(64) DEFAULT ''",
             }
             for column, sql_type in additions.items():
                 if column not in existing:
@@ -60,6 +65,36 @@ def _migrate_sqlite_schema(target_engine=engine) -> None:
                     "ON structure_events (parent_event_id)"
                 )
             )
+        if "klines" in tables:
+            existing = {column["name"] for column in inspector.get_columns("klines")}
+            if "turnover" not in existing:
+                connection.execute(text("ALTER TABLE klines ADD COLUMN turnover FLOAT DEFAULT 0"))
+        if "indicators" in tables:
+            existing = {column["name"] for column in inspector.get_columns("indicators")}
+            additions = {
+                "ma5": "FLOAT",
+                "ma10": "FLOAT",
+                "ema5": "FLOAT",
+                "ema10": "FLOAT",
+                "ema20": "FLOAT",
+                "ema60": "FLOAT",
+                "boll_mid": "FLOAT",
+                "boll_upper": "FLOAT",
+                "boll_lower": "FLOAT",
+                "rsi6": "FLOAT",
+                "rsi14": "FLOAT",
+                "kdj_k": "FLOAT",
+                "kdj_d": "FLOAT",
+                "kdj_j": "FLOAT",
+                "turnover": "FLOAT",
+                "turnover_ma20": "FLOAT",
+                "volume_ratio": "FLOAT",
+                "change_pct": "FLOAT",
+                "amplitude_pct": "FLOAT",
+            }
+            for column, sql_type in additions.items():
+                if column not in existing:
+                    connection.execute(text(f"ALTER TABLE indicators ADD COLUMN {column} {sql_type}"))
         if "trade_signals" in tables:
             existing = {column["name"] for column in inspector.get_columns("trade_signals")}
             additions = {

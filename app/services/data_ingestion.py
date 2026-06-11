@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.domain import CORE_TIMEFRAMES, DISPLAY_TIMEFRAMES, Bar
-from app.models import KLine, WatchlistItem
+from app.models import CandidateStock, KLine, WatchlistItem
 from app.providers.base import MarketDataProvider
 from app.services.data_quality import validate_bar
 
@@ -41,6 +41,20 @@ def active_symbols(session: Session, include_market: list[str] | None = None) ->
     return symbols
 
 
+def candidate_symbols(session: Session, include_market: list[str] | None = None) -> list[str]:
+    symbols = list(
+        session.scalars(
+            select(CandidateStock.symbol)
+            .where(CandidateStock.active.is_(True))
+            .order_by(CandidateStock.rank_score.desc(), CandidateStock.symbol)
+        )
+    )
+    for symbol in include_market or []:
+        if symbol not in symbols:
+            symbols.append(symbol)
+    return symbols
+
+
 def upsert_bars(session: Session, bars: list[Bar]) -> tuple[int, int]:
     count = 0
     anomaly_count = 0
@@ -50,7 +64,17 @@ def upsert_bars(session: Session, bars: list[Bar]) -> tuple[int, int]:
             select(KLine).where(KLine.symbol == bar.symbol, KLine.timeframe == bar.timeframe, KLine.ts == bar.ts)
         )
         if record is None:
-            record = KLine(symbol=bar.symbol, timeframe=bar.timeframe, ts=bar.ts, open=bar.open, high=bar.high, low=bar.low, close=bar.close, volume=bar.volume)
+            record = KLine(
+                symbol=bar.symbol,
+                timeframe=bar.timeframe,
+                ts=bar.ts,
+                open=bar.open,
+                high=bar.high,
+                low=bar.low,
+                close=bar.close,
+                volume=bar.volume,
+                turnover=bar.turnover,
+            )
             session.add(record)
         else:
             record.open = bar.open
@@ -58,6 +82,7 @@ def upsert_bars(session: Session, bars: list[Bar]) -> tuple[int, int]:
             record.low = bar.low
             record.close = bar.close
             record.volume = bar.volume
+            record.turnover = bar.turnover
         record.data_ok = data_ok
         record.anomaly_reason = "" if data_ok else reason
         count += 1

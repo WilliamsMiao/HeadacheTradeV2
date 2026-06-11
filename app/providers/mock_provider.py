@@ -11,6 +11,26 @@ class MockProvider(MarketDataProvider):
     def get_watchlist(self) -> list[dict[str, str]]:
         return [{"symbol": symbol, "name": symbol, "industry": "Technology", "source_group": "mock"} for symbol in self.symbols if symbol not in {"SPY", "QQQ"}]
 
+    def get_stock_filter_candidates(self) -> list[dict[str, object]]:
+        rows = []
+        pools = ("LOW_REBOUND", "TREND_UP", "HIGH_RISK", "WEAK_DOWN")
+        tags = ("MACD_LOW_IMPROVING", "MA_ALIGNMENT_LONG", "MACD_TOP_DIVERGENCE", "MA_ALIGNMENT_SHORT")
+        for index, symbol in enumerate(item for item in self.symbols if item not in {"SPY", "QQQ"}):
+            rows.append(
+                {
+                    "symbol": symbol,
+                    "name": symbol,
+                    "market": "US",
+                    "pool_type": pools[index % len(pools)],
+                    "tag": tags[index % len(tags)],
+                    "cur_price": 100 + index,
+                    "market_val": 50_000_000_000,
+                    "turnover_3d": 100_000_000 + index * 10_000_000,
+                    "volume_ratio": 1.2 + index * 0.1,
+                }
+            )
+        return rows
+
     def get_klines(self, symbol: str, timeframe: str, start: datetime | None = None, end: datetime | None = None) -> list[Bar]:
         if timeframe not in SUPPORTED_TIMEFRAMES:
             raise ValueError(f"unsupported mock timeframe: {timeframe}")
@@ -28,7 +48,8 @@ class MockProvider(MarketDataProvider):
         }
         count = count_by_timeframe[timeframe]
         delta = delta_by_timeframe[timeframe]
-        begin = datetime(2025, 1, 1, 9, 30)
+        end_anchor = datetime(2026, 6, 10, 16, 0)
+        begin = end_anchor - (count - 1) * delta
         bars: list[Bar] = []
         base = 100 + len(symbol) * 3
         for index in range(count):
@@ -42,5 +63,17 @@ class MockProvider(MarketDataProvider):
             high = close + 1.2
             low = close - 1.5
             volume = 1_000_000 + index * 5000
-            bars.append(Bar(symbol=symbol, timeframe=timeframe, ts=begin + index * delta, open=open_price, high=high, low=low, close=close, volume=volume))
+            bars.append(
+                Bar(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    ts=begin + index * delta,
+                    open=open_price,
+                    high=high,
+                    low=low,
+                    close=close,
+                    volume=volume,
+                    turnover=close * volume,
+                )
+            )
         return bars

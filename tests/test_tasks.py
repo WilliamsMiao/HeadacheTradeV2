@@ -45,9 +45,9 @@ def test_market_data_reports_progress_per_symbol_and_timeframe(session):
         on_progress=lambda current, total, message: updates.append((current, total, message)),
     )
 
-    assert len(updates) == 6
-    assert updates[0] == (1, 6, "正在更新 AAPL · 1d")
-    assert updates[-1] == (6, 6, "正在更新 MSFT · 15m")
+    assert len(updates) == 4
+    assert updates[0] == (1, 4, "正在更新 AAPL · 1d")
+    assert updates[-1] == (4, 4, "正在更新 MSFT · 60m")
 
 
 def test_task_runner_records_success_and_progress():

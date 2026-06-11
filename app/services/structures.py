@@ -296,6 +296,9 @@ def persist_structure_detections(
             )
         )
         if existing:
+            existing.direction = _event_direction(detection.event_type, stock_trend)
+            existing.stage = _event_stage(detection.event_type)
+            existing.suggested_action = _event_action(detection.event_type, stock_trend)
             records.append(existing)
             continue
 
@@ -317,6 +320,9 @@ def persist_structure_detections(
             script_version=detection.script_version,
             market_state=market_state,
             stock_trend=stock_trend,
+            direction=_event_direction(detection.event_type, stock_trend),
+            stage=_event_stage(detection.event_type),
+            suggested_action=_event_action(detection.event_type, stock_trend),
         )
         session.add(event)
         session.flush()
@@ -359,3 +365,35 @@ def update_structure_follow_through(session: Session) -> int:
         updated += 1
     session.commit()
     return updated
+
+
+def _event_direction(event_type: str, daily_state: str) -> str:
+    if event_type in {"BOTTOM_PASSIVATION", "BOTTOM_STRUCTURE", "TOP_INVALIDATED"}:
+        return "LONG"
+    if event_type == "TOP_STRUCTURE" and daily_state in {"DAILY_WEAK_BEAR", "DAILY_STRONG_BEAR"}:
+        return "SHORT"
+    return "RISK"
+
+
+def _event_stage(event_type: str) -> str:
+    if event_type.endswith("PASSIVATION"):
+        return "PASSIVATION"
+    if event_type in {"BOTTOM_STRUCTURE", "TOP_STRUCTURE"}:
+        return "CONFIRMED"
+    if event_type.endswith("FAILED"):
+        return "FAILED"
+    if event_type.endswith("INVALIDATED"):
+        return "INVALIDATED"
+    return "UNKNOWN"
+
+
+def _event_action(event_type: str, daily_state: str) -> str:
+    if event_type == "BOTTOM_STRUCTURE":
+        return "生成多头计划并等待关键价位"
+    if event_type == "TOP_STRUCTURE" and daily_state in {"DAILY_WEAK_BEAR", "DAILY_STRONG_BEAR"}:
+        return "评估下行计划，不直接做空"
+    if event_type == "TOP_STRUCTURE":
+        return "进入风险保护观察，不直接清仓"
+    if event_type == "TOP_INVALIDATED":
+        return "评估强趋势恢复计划"
+    return "继续观察，等待结构确认"

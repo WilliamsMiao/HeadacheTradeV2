@@ -21,8 +21,8 @@ from app.services.pipeline import display_data_status
 
 
 def test_timeframe_roles_are_explicit():
-    assert CORE_TIMEFRAMES == ("1d", "60m", "15m")
-    assert DISPLAY_TIMEFRAMES == ("5m",)
+    assert CORE_TIMEFRAMES == ("1d", "60m")
+    assert DISPLAY_TIMEFRAMES == ("15m", "5m")
     assert TREND_TIMEFRAME == DAILY
     assert STRUCTURE_TIMEFRAME == HOUR_60
     assert TRIGGER_TIMEFRAME == MIN_15
@@ -49,11 +49,12 @@ def test_mock_provider_supports_core_and_display_timeframes():
 def test_display_timeframe_is_optional(session):
     provider = MockProvider(["AAPL"])
     core_results = update_market_data(session, provider, ["AAPL"])
-    assert "AAPL:15m" in core_results
+    assert "AAPL:15m" not in core_results
     assert "AAPL:5m" not in core_results
     assert display_data_status(session, "AAPL")[0] is False
 
     display_results = update_market_data(session, provider, ["AAPL"], include_display_timeframes=True)
+    assert "AAPL:15m" in display_results
     assert "AAPL:5m" in display_results
     assert display_data_status(session, "AAPL") == (True, "display data available")
 
