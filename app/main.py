@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from starlette.requests import Request
 
 from app.config import get_settings
+from app.domain import STRUCTURE_TIMEFRAME
 from app.db import get_session, init_db
 from app.db import SessionLocal
 from app.auth import (
@@ -43,6 +44,14 @@ from app.services.pipeline import symbol_data_status
 from app.services.market import market_diagnostics
 from app.services import opend_admin
 from app.services.risk import get_or_create_risk_config
+from app.services.workbench import (
+    debug_payload,
+    events_payload,
+    frames_payload,
+    signals_payload,
+    state_payload,
+    workbench_watchlist,
+)
 from app.presentation import (
     describe_market_state,
     describe_market_reason,
@@ -235,6 +244,36 @@ def symbol_detail(symbol: str, request: Request, session: Session = Depends(get_
     )
 
 
+@app.get("/workbench/{symbol}", response_class=HTMLResponse)
+def workbench(symbol: str, request: Request, session: Session = Depends(get_session)):
+    symbol = symbol.upper()
+    item = session.scalar(select(WatchlistItem).where(WatchlistItem.symbol == symbol))
+    if item is None:
+        raise HTTPException(status_code=404, detail="symbol not found")
+    return templates.TemplateResponse(
+        request,
+        "workbench.html",
+        {
+            "title": f"{symbol} 多周期工作台",
+            "item": item,
+            "watchlist": workbench_watchlist(session),
+        },
+    )
+
+
+@app.get("/workbench")
+def workbench_default(session: Session = Depends(get_session)):
+    symbol = session.scalar(
+        select(WatchlistItem.symbol)
+        .where(WatchlistItem.active.is_(True))
+        .order_by(WatchlistItem.symbol)
+        .limit(1)
+    )
+    if symbol is None:
+        return RedirectResponse("/", status_code=303)
+    return RedirectResponse(f"/workbench/{symbol}", status_code=303)
+
+
 @app.get("/risk", response_class=HTMLResponse)
 def risk_page(request: Request, session: Session = Depends(get_session)):
     return templates.TemplateResponse(request, "risk.html", {"config": get_or_create_risk_config(session)})
@@ -338,6 +377,44 @@ def opend_health() -> dict[str, object]:
     return opend_admin.opend_socket_health()
 
 
+@app.get("/api/workbench/{symbol}/frames")
+def api_workbench_frames(symbol: str, session: Session = Depends(get_session)):
+    _ensure_workbench_symbol(session, symbol)
+    return frames_payload(session, symbol)
+
+
+@app.get("/api/workbench/{symbol}/state")
+def api_workbench_state(symbol: str, session: Session = Depends(get_session)):
+    return _workbench_call(state_payload, session, get_settings(), symbol)
+
+
+@app.get("/api/workbench/{symbol}/events")
+def api_workbench_events(symbol: str, session: Session = Depends(get_session)):
+    return _workbench_call(events_payload, session, symbol)
+
+
+@app.get("/api/workbench/{symbol}/signals")
+def api_workbench_signals(symbol: str, session: Session = Depends(get_session)):
+    return _workbench_call(signals_payload, session, symbol)
+
+
+@app.get("/api/workbench/{symbol}/debug")
+def api_workbench_debug(symbol: str, session: Session = Depends(get_session)):
+    return _workbench_call(debug_payload, session, get_settings(), symbol)
+
+
+def _ensure_workbench_symbol(session: Session, symbol: str) -> None:
+    if session.scalar(select(WatchlistItem.id).where(WatchlistItem.symbol == symbol.upper())) is None:
+        raise HTTPException(status_code=404, detail="symbol not found")
+
+
+def _workbench_call(function, *args):
+    try:
+        return function(*args)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 def _opend_payload(result: opend_admin.AdminResult) -> dict[str, object]:
     payload = {"ok": result.ok, "message": result.message, **result.data}
     payload["socket_health"] = opend_admin.opend_socket_health()
@@ -353,7 +430,15 @@ def _dashboard_context(session: Session) -> dict[str, object]:
     for item in items:
         trend = session.scalar(select(StockTrend).where(StockTrend.symbol == item.symbol).order_by(StockTrend.as_of.desc()).limit(1))
         state = session.scalar(select(TradingState).where(TradingState.symbol == item.symbol))
-        structure = session.scalar(select(StructureEvent).where(StructureEvent.symbol == item.symbol).order_by(StructureEvent.event_ts.desc()).limit(1))
+        structure = session.scalar(
+            select(StructureEvent)
+            .where(
+                StructureEvent.symbol == item.symbol,
+                StructureEvent.timeframe == STRUCTURE_TIMEFRAME,
+            )
+            .order_by(StructureEvent.event_ts.desc())
+            .limit(1)
+        )
         signal = session.scalar(select(TradeSignal).where(TradeSignal.symbol == item.symbol, TradeSignal.status == "PENDING").order_by(TradeSignal.created_at.desc()).limit(1))
         position = session.scalar(select(Position).where(Position.symbol == item.symbol, Position.status == "OPEN"))
         data_ok, data_reason = symbol_data_status(session, item.symbol)

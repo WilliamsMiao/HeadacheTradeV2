@@ -7,6 +7,8 @@ SERVICE_NAME="${SERVICE_NAME:-headachetrade.service}"
 ENV_DIR="${ENV_DIR:-/etc/headachetrade}"
 RELEASE_ID="${RELEASE_ID:-manual}"
 RELEASE_DIR="${APP_ROOT}/releases/${RELEASE_ID}"
+CURRENT_LINK="${APP_ROOT}/current"
+BACKUP_DIR="${APP_ROOT}/shared/backups"
 
 if [[ "$(id -u)" -ne 0 ]]; then
   echo "remote_release.sh must run as root, usually via sudo" >&2
@@ -26,7 +28,7 @@ if ! id "${APP_USER}" >/dev/null 2>&1; then
   useradd --system --create-home --shell /usr/sbin/nologin "${APP_USER}"
 fi
 
-mkdir -p "${RELEASE_DIR}" "${APP_ROOT}/shared/data"
+mkdir -p "${RELEASE_DIR}" "${APP_ROOT}/shared/data" "${BACKUP_DIR}"
 tar -xzf - -C "${RELEASE_DIR}"
 
 mkdir -p "${ENV_DIR}"
@@ -42,7 +44,6 @@ systemctl enable nginx
 systemctl restart nginx
 
 chown -R "${APP_USER}:${APP_USER}" "${APP_ROOT}"
-ln -sfn "${RELEASE_DIR}" "${APP_ROOT}/current"
 
 install -m 0755 "${RELEASE_DIR}/deploy/opend_admin.py" /usr/local/sbin/headachetrade-opend-admin
 cat >/etc/sudoers.d/headachetrade-opend-admin <<EOF
@@ -51,14 +52,74 @@ EOF
 chmod 0440 /etc/sudoers.d/headachetrade-opend-admin
 visudo -cf /etc/sudoers.d/headachetrade-opend-admin
 
-cd "${APP_ROOT}/current"
+cd "${RELEASE_DIR}"
 sudo -u "${APP_USER}" uv sync --frozen --no-dev
-sudo -u "${APP_USER}" uv run python -m app.cli init-db
+
+set -a
+# shellcheck disable=SC1090
+source "${ENV_DIR}/headachetrade.env"
+set +a
+
+if [[ "${DATABASE_URL:-}" == sqlite:///* ]]; then
+  database_path="${DATABASE_URL#sqlite:///}"
+  if [[ -f "${database_path}" ]]; then
+    backup_path="${BACKUP_DIR}/headache_trade_${RELEASE_ID}.sqlite3"
+    python3 - "${database_path}" "${backup_path}" <<'PY'
+import sqlite3
+import sys
+
+source = sqlite3.connect(sys.argv[1])
+target = sqlite3.connect(sys.argv[2])
+with target:
+    source.backup(target)
+target.close()
+source.close()
+PY
+    chown "${APP_USER}:${APP_USER}" "${backup_path}"
+    find "${BACKUP_DIR}" -type f -name 'headache_trade_*.sqlite3' -printf '%T@ %p\n' \
+      | sort -nr \
+      | tail -n +11 \
+      | cut -d' ' -f2- \
+      | xargs -r rm -f
+  fi
+fi
+
+sudo -E -u "${APP_USER}" uv run python -m app.cli init-db
+
+previous_release="$(readlink -f "${CURRENT_LINK}" || true)"
+ln -sfn "${RELEASE_DIR}" "${CURRENT_LINK}"
 
 install -m 0644 deploy/headachetrade.service "/etc/systemd/system/${SERVICE_NAME}"
 systemctl daemon-reload
 systemctl enable "${SERVICE_NAME}"
-systemctl restart "${SERVICE_NAME}"
+if ! systemctl restart "${SERVICE_NAME}"; then
+  if [[ -n "${previous_release}" && -d "${previous_release}" ]]; then
+    ln -sfn "${previous_release}" "${CURRENT_LINK}"
+    systemctl restart "${SERVICE_NAME}" || true
+  fi
+  systemctl status "${SERVICE_NAME}" --no-pager --lines=50 || true
+  exit 1
+fi
+
+healthy=0
+for _ in $(seq 1 20); do
+  if curl --fail --silent --show-error http://127.0.0.1:8001/health >/dev/null; then
+    healthy=1
+    break
+  fi
+  sleep 1
+done
+
+if [[ "${healthy}" != "1" ]]; then
+  echo "New release failed health check; rolling back application symlink" >&2
+  if [[ -n "${previous_release}" && -d "${previous_release}" ]]; then
+    ln -sfn "${previous_release}" "${CURRENT_LINK}"
+    systemctl restart "${SERVICE_NAME}" || true
+  fi
+  systemctl status "${SERVICE_NAME}" --no-pager --lines=50 || true
+  exit 1
+fi
+
 systemctl status "${SERVICE_NAME}" --no-pager --lines=30
 
 if [[ "${INSTALL_FUTU_OPEND:-1}" == "1" ]]; then

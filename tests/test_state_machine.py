@@ -1,8 +1,9 @@
-from datetime import date
+from datetime import date, datetime, timedelta
 
-from app.models import KLine, TradingState
-from app.services.state_machine import advance_state_machine
 from sqlalchemy import select
+
+from app.models import Indicator, KLine, Position, StateTransitionLog, StructureEvent, TradeSignal, TradingState
+from app.services.state_machine import advance_state_machine
 
 
 def test_data_missing_does_not_advance_to_entry(session):
@@ -17,3 +18,346 @@ def test_cooldown_blocks_entry(session):
     state = advance_state_machine(session, "AAPL", "RISK_ON", "UPTREND")
     assert state.state == "COOLDOWN"
 
+
+def _seed_entry_context(session, *, trigger_ready: bool) -> StructureEvent:
+    base = datetime(2026, 6, 8, 9, 30)
+    for index in range(10):
+        ts = base - timedelta(days=10 - index)
+        close = 98 + index * 0.2
+        session.add(
+            KLine(
+                symbol="AAPL",
+                timeframe="1d",
+                ts=ts,
+                open=close - 0.2,
+                high=close + 0.5,
+                low=close - 0.8,
+                close=close,
+                volume=1_000_000,
+            )
+        )
+    latest_daily_ts = base - timedelta(days=1)
+    session.add(
+        Indicator(
+            symbol="AAPL",
+            timeframe="1d",
+            ts=latest_daily_ts,
+            ma20=98,
+            ma60=95,
+            macd_dif=1,
+            macd_dea=0.8,
+            macd_hist=0.4,
+            atr=2,
+            volume_ma20=900_000,
+        )
+    )
+
+    structure = StructureEvent(
+        symbol="AAPL",
+        timeframe="60m",
+        event_type="BOTTOM_STRUCTURE",
+        event_ts=base,
+        price=99,
+        reason="60m bottom structure confirmed",
+        pivot_low=96,
+        invalidation_level=96,
+        trigger_level=101,
+        expires_at=base + timedelta(days=14),
+        script_version="macd-structure-v1",
+    )
+    session.add(structure)
+    session.add(
+        KLine(
+            symbol="AAPL",
+            timeframe="60m",
+            ts=base,
+            open=98,
+            high=100,
+            low=97,
+            close=99,
+            volume=800_000,
+        )
+    )
+    session.add(
+        Indicator(
+            symbol="AAPL",
+            timeframe="60m",
+            ts=base,
+            ma20=98,
+            ma60=96,
+            macd_dif=0.4,
+            macd_dea=0.3,
+            macd_hist=0.2,
+            atr=2,
+            volume_ma20=800_000,
+        )
+    )
+
+    for index in range(9):
+        ts = base + timedelta(minutes=15 * (index + 1))
+        close = 99.0 + index * 0.2
+        high = close + 0.3
+        if trigger_ready and index == 8:
+            close = 102.5
+            high = 102.8
+        bar = KLine(
+            symbol="AAPL",
+            timeframe="15m",
+            ts=ts,
+            open=close - 0.2,
+            high=high,
+            low=close - 0.4,
+            close=close,
+            volume=700_000,
+        )
+        session.add(bar)
+        session.add(
+            Indicator(
+                symbol="AAPL",
+                timeframe="15m",
+                ts=ts,
+                ma20=101 if index == 8 else 99,
+                ma60=98,
+                macd_dif=0.1 + index * 0.02,
+                macd_dea=0.1,
+                macd_hist=-0.8 + index * 0.1,
+                atr=2,
+                volume_ma20=1_000_000,
+            )
+        )
+    session.commit()
+    session.refresh(structure)
+    return structure
+
+
+def test_strong_15m_without_60m_bottom_structure_cannot_create_entry(session):
+    structure = _seed_entry_context(session, trigger_ready=True)
+    session.delete(structure)
+    session.commit()
+
+    state = advance_state_machine(session, "AAPL", "RISK_ON", "UPTREND")
+
+    assert state.state == "TREND_OK"
+    assert session.scalar(select(TradeSignal).where(TradeSignal.signal_type == "ENTRY")) is None
+
+
+def test_bottom_structure_without_15m_trigger_waits(session):
+    _seed_entry_context(session, trigger_ready=False)
+
+    state = advance_state_machine(session, "AAPL", "RISK_ON", "UPTREND")
+
+    assert state.state == "WAIT_15M_TRIGGER"
+    assert "等待" in state.next_wait
+    assert session.scalar(select(TradeSignal).where(TradeSignal.signal_type == "ENTRY")) is None
+
+
+def test_15m_trigger_after_bottom_structure_creates_auditable_entry(session):
+    structure = _seed_entry_context(session, trigger_ready=True)
+
+    state = advance_state_machine(session, "AAPL", "RISK_ON", "UPTREND")
+
+    signal = session.scalar(select(TradeSignal).where(TradeSignal.signal_type == "ENTRY"))
+    assert state.state == "ENTRY_CANDIDATE"
+    assert signal is not None
+    assert f"structure_id={structure.id}" in signal.reason
+    assert "structure_timeframe=60m" in signal.reason
+    assert "trigger_timeframe=15m" in signal.reason
+    assert "trigger_ts=" in signal.reason
+    assert "generated by state machine, not score" in signal.reason
+    assert signal.source_structure_id == structure.id
+    assert signal.trigger_timeframe == "15m"
+    assert signal.trigger_ts is not None
+    assert signal.trigger_level is not None
+    assert signal.entry_price == 102.5
+    assert signal.stop_price == 95
+    assert signal.risk_per_share == 7.5
+    assert signal.allowed_loss == 1000
+    assert signal.position_value == signal.entry_price * signal.shares
+    assert signal.risk_amount == signal.risk_per_share * signal.shares
+    assert signal.script_version == "macd-structure-v1+macd-15m-trigger-v1"
+    assert signal.expires_at == signal.trigger_ts + timedelta(minutes=60)
+    transitions = list(
+        session.scalars(
+            select(StateTransitionLog)
+            .where(StateTransitionLog.symbol == "AAPL")
+            .order_by(StateTransitionLog.id)
+        )
+    )
+    assert [item.to_state for item in transitions] == [
+        "BOTTOM_CONFIRMED",
+        "WAIT_15M_TRIGGER",
+        "ENTRY_CANDIDATE",
+    ]
+
+
+def test_risk_off_blocks_15m_entry_trigger(session):
+    _seed_entry_context(session, trigger_ready=True)
+
+    state = advance_state_machine(session, "AAPL", "RISK_OFF", "UPTREND")
+
+    assert state.state == "IDLE"
+    assert session.scalar(select(TradeSignal).where(TradeSignal.signal_type == "ENTRY")) is None
+
+
+def test_downtrend_blocks_15m_entry_trigger(session):
+    _seed_entry_context(session, trigger_ready=True)
+
+    state = advance_state_machine(session, "AAPL", "RISK_ON", "DOWNTREND")
+
+    assert state.state == "IDLE"
+    assert session.scalar(select(TradeSignal).where(TradeSignal.signal_type == "ENTRY")) is None
+
+
+def test_expired_bottom_structure_enters_cooldown(session):
+    structure = _seed_entry_context(session, trigger_ready=True)
+    structure.expires_at = structure.event_ts + timedelta(minutes=30)
+    session.commit()
+
+    state = advance_state_machine(session, "AAPL", "RISK_ON", "UPTREND")
+
+    assert state.state == "COOLDOWN"
+    assert state.cooldown_until is not None
+    assert session.scalar(select(TradeSignal).where(TradeSignal.signal_type == "ENTRY")) is None
+
+
+def test_pending_entry_does_not_replay_structure_state_chain(session):
+    _seed_entry_context(session, trigger_ready=True)
+    first_state = advance_state_machine(session, "AAPL", "RISK_ON", "UPTREND")
+    first_log_count = len(list(session.scalars(select(StateTransitionLog))))
+
+    second_state = advance_state_machine(session, "AAPL", "RISK_ON", "UPTREND")
+
+    assert first_state.state == "ENTRY_CANDIDATE"
+    assert second_state.state == "ENTRY_CANDIDATE"
+    assert len(list(session.scalars(select(StateTransitionLog)))) == first_log_count + 1
+
+
+def test_missing_structure_pivot_prevents_entry_signal(session):
+    structure = _seed_entry_context(session, trigger_ready=True)
+    structure.pivot_low = None
+    session.commit()
+
+    state = advance_state_machine(session, "AAPL", "RISK_ON", "UPTREND")
+
+    assert state.state == "WAIT_15M_TRIGGER"
+    assert "结构低点" in state.next_wait
+    assert session.scalar(select(TradeSignal).where(TradeSignal.signal_type == "ENTRY")) is None
+
+
+def test_missing_60m_atr_prevents_entry_signal(session):
+    _seed_entry_context(session, trigger_ready=True)
+    indicator = session.scalar(
+        select(Indicator).where(
+            Indicator.symbol == "AAPL",
+            Indicator.timeframe == "60m",
+        )
+    )
+    assert indicator is not None
+    indicator.atr = None
+    session.commit()
+
+    state = advance_state_machine(session, "AAPL", "RISK_ON", "UPTREND")
+
+    assert state.state == "WAIT_15M_TRIGGER"
+    assert "ATR" in state.next_wait
+    assert session.scalar(select(TradeSignal).where(TradeSignal.signal_type == "ENTRY")) is None
+
+
+def test_bottom_failure_cancels_pending_signal_and_starts_cooldown(session):
+    structure = _seed_entry_context(session, trigger_ready=True)
+    advance_state_machine(session, "AAPL", "RISK_ON", "UPTREND")
+    session.add(
+        StructureEvent(
+            symbol="AAPL",
+            timeframe="60m",
+            event_type="BOTTOM_FAILED",
+            event_ts=datetime(2026, 6, 8, 12),
+            price=95,
+            parent_event_id=structure.id,
+            reason="bottom structure failed",
+        )
+    )
+    session.commit()
+
+    state = advance_state_machine(session, "AAPL", "RISK_ON", "UPTREND")
+    signal = session.scalar(select(TradeSignal).where(TradeSignal.signal_type == "ENTRY"))
+
+    assert state.state == "COOLDOWN"
+    assert state.cooldown_until is not None
+    assert signal is not None
+    assert signal.status == "CANCELLED_BY_STRUCTURE"
+
+
+def test_market_downgrade_moves_open_position_to_risk_protection(session):
+    _seed_entry_context(session, trigger_ready=False)
+    signal = TradeSignal(
+        symbol="AAPL",
+        signal_type="ENTRY",
+        status="APPROVED",
+        entry_price=98,
+        stop_price=90,
+        shares=100,
+        risk_amount=800,
+        reason="approved",
+    )
+    session.add(signal)
+    session.flush()
+    session.add(
+        Position(
+            symbol="AAPL",
+            entry_signal_id=signal.id,
+            entry_price=98,
+            stop_price=90,
+            shares=100,
+            risk_amount=800,
+        )
+    )
+    session.commit()
+
+    state = advance_state_machine(session, "AAPL", "RISK_OFF", "UPTREND")
+
+    assert state.state == "RISK_PROTECTION"
+    position = session.scalar(select(Position).where(Position.symbol == "AAPL"))
+    assert position is not None
+    assert position.trailing_stop == 98
+
+
+def test_market_downgrade_with_60m_ma60_break_creates_exit_candidate(session):
+    _seed_entry_context(session, trigger_ready=False)
+    hourly = session.scalar(select(KLine).where(KLine.symbol == "AAPL", KLine.timeframe == "60m"))
+    indicator = session.scalar(select(Indicator).where(Indicator.symbol == "AAPL", Indicator.timeframe == "60m"))
+    assert hourly is not None
+    assert indicator is not None
+    hourly.close = 94
+    indicator.ma60 = 96
+    signal = TradeSignal(
+        symbol="AAPL",
+        signal_type="ENTRY",
+        status="APPROVED",
+        entry_price=98,
+        stop_price=90,
+        shares=100,
+        risk_amount=800,
+        reason="approved",
+    )
+    session.add(signal)
+    session.flush()
+    session.add(
+        Position(
+            symbol="AAPL",
+            entry_signal_id=signal.id,
+            entry_price=98,
+            stop_price=90,
+            shares=100,
+            risk_amount=800,
+        )
+    )
+    session.commit()
+
+    state = advance_state_machine(session, "AAPL", "RISK_OFF", "UPTREND")
+
+    assert state.state == "EXIT_CANDIDATE"
+    exit_signal = session.scalar(
+        select(TradeSignal).where(TradeSignal.symbol == "AAPL", TradeSignal.signal_type == "EXIT")
+    )
+    assert exit_signal is not None
