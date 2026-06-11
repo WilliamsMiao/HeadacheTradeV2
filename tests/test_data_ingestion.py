@@ -6,6 +6,7 @@ from app.domain import Bar
 from app.models import KLine
 from app.providers.base import MarketDataProvider
 from app.services.data_ingestion import update_market_data
+from app.services.indicators import compute_indicators_for_symbol
 from app.services.pipeline import symbol_data_status
 
 
@@ -24,11 +25,12 @@ class FixedProvider(MarketDataProvider):
 def test_anomalous_bar_does_not_mark_whole_batch_bad(session):
     results = update_market_data(session, FixedProvider(), ["AAPL"])
 
-    daily = list(
-        session.scalars(select(KLine).where(KLine.symbol == "AAPL", KLine.timeframe == "1d").order_by(KLine.ts))
-    )
+    daily = list(session.scalars(select(KLine).where(KLine.symbol == "AAPL", KLine.timeframe == "1d").order_by(KLine.ts)))
     assert [bar.data_ok for bar in daily] == [True, False, True]
     assert "1 anomalous bars isolated" in results["AAPL:1d"]
+    assert "AAPL:15m" in results
+    for timeframe in ("1d", "60m", "15m"):
+        compute_indicators_for_symbol(session, "AAPL", timeframe)
     assert symbol_data_status(session, "AAPL") == (True, "data quality passed")
 
 
@@ -55,9 +57,21 @@ def test_stale_intraday_data_is_reported_precisely(session):
                 close=10,
                 volume=100,
             ),
+            KLine(
+                symbol="AAPL",
+                timeframe="15m",
+                ts=datetime(2026, 6, 10, 15, 45),
+                open=10,
+                high=11,
+                low=9,
+                close=10,
+                volume=100,
+            ),
         ]
     )
     session.commit()
+    for timeframe in ("1d", "60m", "15m"):
+        compute_indicators_for_symbol(session, "AAPL", timeframe)
 
     ok, reason = symbol_data_status(session, "AAPL")
     assert ok is False

@@ -2,8 +2,15 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import Settings
-from app.domain import DAILY, HOUR_60
-from app.models import KLine, TradeSignal
+from app.domain import (
+    CORE_TIMEFRAMES,
+    DISPLAY_TIMEFRAME,
+    STRUCTURE_TIMEFRAME,
+    TIMEFRAME_LABELS,
+    TIMEFRAME_STALE_DAYS,
+    TREND_TIMEFRAME,
+)
+from app.models import Indicator, KLine, TradeSignal
 from app.providers.futu_provider import FutuProvider
 from app.providers.mock_provider import MockProvider
 from app.services.data_ingestion import active_symbols, sync_watchlist, update_market_data
@@ -38,7 +45,12 @@ def run_update_market_data(session: Session, settings: Settings, use_mock: bool 
         if not symbols:
             sync_watchlist(session, provider)
             symbols = list(dict.fromkeys([*settings.market_symbols, *active_symbols(session)]))
-        details = update_market_data(session, provider, symbols)
+        details = update_market_data(
+            session,
+            provider,
+            symbols,
+            include_display_timeframes=settings.futu_include_5m,
+        )
         failures = {
             key: value
             for key, value in details.items()
@@ -62,7 +74,7 @@ def run_compute_indicators(session: Session, settings: Settings) -> int:
     symbols = active_symbols(session, include_market=settings.market_symbols)
     count = 0
     for symbol in symbols:
-        for timeframe in (DAILY, HOUR_60):
+        for timeframe in CORE_TIMEFRAMES:
             count += compute_indicators_for_symbol(session, symbol, timeframe)
     return count
 
@@ -83,7 +95,7 @@ def run_pipeline(session: Session, settings: Settings) -> dict[str, int | str]:
             continue
         trend_eval = evaluate_stock_trend(session, symbol)
         persist_stock_trend(session, trend_eval)
-        detections = detect_latest_structures(session, symbol, DAILY) + detect_latest_structures(session, symbol, HOUR_60)
+        detections = detect_latest_structures(session, symbol, STRUCTURE_TIMEFRAME)
         records = persist_structure_detections(session, detections, market_eval.state, trend_eval.trend)
         counts["structures"] += len(records)
         advance_state_machine(session, symbol, market_eval.state, trend_eval.trend)
@@ -102,28 +114,55 @@ def run_full_refresh(session: Session, settings: Settings, use_mock: bool = Fals
 
 
 def symbol_data_status(session: Session, symbol: str) -> tuple[bool, str]:
-    for timeframe in (DAILY, HOUR_60):
+    latest_bars: dict[str, KLine] = {}
+    for timeframe in CORE_TIMEFRAMES:
         bar = session.scalar(
             select(KLine)
             .where(KLine.symbol == symbol, KLine.timeframe == timeframe)
             .order_by(KLine.ts.desc())
             .limit(1)
         )
-        timeframe_label = "daily" if timeframe == DAILY else "60m"
+        timeframe_label = "daily" if timeframe == TREND_TIMEFRAME else timeframe
         if bar is None:
             return False, f"{timeframe_label} data missing"
         if not bar.data_ok:
             return False, bar.anomaly_reason or f"{timeframe_label} data anomaly"
+        latest_bars[timeframe] = bar
 
-    daily_bar = session.scalar(
-        select(KLine).where(KLine.symbol == symbol, KLine.timeframe == DAILY).order_by(KLine.ts.desc()).limit(1)
-    )
-    hour_bar = session.scalar(
-        select(KLine).where(KLine.symbol == symbol, KLine.timeframe == HOUR_60).order_by(KLine.ts.desc()).limit(1)
-    )
-    if daily_bar and hour_bar and (daily_bar.ts.date() - hour_bar.ts.date()).days > 7:
-        return False, f"60m data stale at {hour_bar.ts:%Y-%m-%d}; latest daily bar is {daily_bar.ts:%Y-%m-%d}"
+        indicator = session.scalar(
+            select(Indicator).where(
+                Indicator.symbol == symbol,
+                Indicator.timeframe == timeframe,
+                Indicator.ts == bar.ts,
+            )
+        )
+        if indicator is None:
+            return False, f"{timeframe_label} indicators missing at {bar.ts:%Y-%m-%d %H:%M}"
+
+    trend_bar = latest_bars[TREND_TIMEFRAME]
+    for timeframe in CORE_TIMEFRAMES:
+        bar = latest_bars[timeframe]
+        if (trend_bar.ts.date() - bar.ts.date()).days > TIMEFRAME_STALE_DAYS[timeframe]:
+            return (
+                False,
+                f"{timeframe} data stale at {bar.ts:%Y-%m-%d}; "
+                f"latest daily bar is {trend_bar.ts:%Y-%m-%d}",
+            )
     return True, "data quality passed"
+
+
+def display_data_status(session: Session, symbol: str) -> tuple[bool, str]:
+    bar = session.scalar(
+        select(KLine)
+        .where(KLine.symbol == symbol, KLine.timeframe == DISPLAY_TIMEFRAME)
+        .order_by(KLine.ts.desc())
+        .limit(1)
+    )
+    if bar is None:
+        return False, f"{TIMEFRAME_LABELS[DISPLAY_TIMEFRAME]} data missing; core trading is not blocked"
+    if not bar.data_ok:
+        return False, bar.anomaly_reason or f"{TIMEFRAME_LABELS[DISPLAY_TIMEFRAME]} data anomaly"
+    return True, "display data available"
 
 
 def _pending_signal_count(session: Session) -> int:

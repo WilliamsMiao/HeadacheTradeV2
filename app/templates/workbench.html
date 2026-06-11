@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="workbench" data-workbench data-symbol="{{ item.symbol }}">
+  <header class="workbench-header">
+    <div>
+      <span class="eyebrow">多周期决策工作台</span>
+      <h1>{{ item.symbol }} <span>{{ item.name }}</span></h1>
+      <p>日线定方向，60 分钟识别结构，15 分钟等待触发；5 分钟仅辅助观察。</p>
+    </div>
+    <div class="toolbar">
+      <a class="button-secondary" href="/symbols/{{ item.symbol }}">查看完整历史</a>
+      <button type="button" data-workbench-refresh data-loading-text="正在刷新">刷新工作台</button>
+    </div>
+  </header>
+
+  <div class="workbench-layout">
+    <aside class="workbench-watchlist panel" aria-label="股票池">
+      <div class="panel-head">
+        <div class="panel-head-copy">
+          <h2>股票池</h2>
+          <span>{{ watchlist|length }} 只股票</span>
+        </div>
+      </div>
+      <label class="workbench-search">
+        <span>筛选状态</span>
+        <select data-workbench-filter>
+          <option value="all">全部</option>
+          <option value="TREND_OK">趋势合格</option>
+          <option value="BOTTOM_CONFIRMED">底结构确认</option>
+          <option value="WAIT_15M_TRIGGER">等待 15 分钟触发</option>
+          <option value="ENTRY_CANDIDATE">入场候选</option>
+          <option value="IN_POSITION">持仓管理</option>
+          <option value="RISK_PROTECTION">风险保护</option>
+          <option value="EXIT_CANDIDATE">退出候选</option>
+          <option value="COOLDOWN">冷却期</option>
+          <option value="DATA_ANOMALY">数据异常</option>
+        </select>
+      </label>
+      <div class="watchlist-items" data-workbench-watchlist>
+        {% for row in watchlist %}
+        <a
+          class="watchlist-item{% if row.symbol == item.symbol %} active{% endif %}"
+          href="/workbench/{{ row.symbol }}"
+          data-state="{{ row.state }}"
+          data-data-ok="{{ 'true' if row.data_ok else 'false' }}"
+        >
+          <span class="watchlist-symbol">
+            <strong>{{ row.symbol }}</strong>
+            <small>{{ row.name or "未提供名称" }}</small>
+          </span>
+          <span class="state {{ 'state-warning' if not row.data_ok else '' }}">
+            {{ "数据异常" if not row.data_ok else row.state_label }}
+          </span>
+          <small>{{ row.trend_label }} · {{ row.structure_label }}</small>
+          <small>
+            {{ "待审批" if row.pending else ("持仓中" if row.position else (("冷却至 " ~ row.cooldown) if row.cooldown else "暂无待办")) }}
+          </small>
+        </a>
+        {% else %}
+        <div class="empty">
+          <strong>股票池为空</strong>
+          <span>先在看板同步 Futu 自选股。</span>
+        </div>
+        {% endfor %}
+      </div>
+      <div class="empty compact-note" data-watchlist-empty hidden>
+        <strong>当前筛选没有股票</strong>
+        <span>切换筛选条件查看其他状态。</span>
+      </div>
+    </aside>
+
+    <main class="workbench-center">
+      <section class="panel chart-panel">
+        <div class="panel-head">
+          <div class="panel-head-copy">
+            <h2>多周期行情与系统标记</h2>
+            <span>结构和交易标记来自后端状态机，前端不生成独立信号。</span>
+          </div>
+          <span class="state" data-workbench-data-state>正在读取</span>
+        </div>
+        <div class="chart-stack" data-chart-stack aria-live="polite">
+          {% for timeframe in ["1d", "60m", "15m"] %}
+          <article class="timeframe-chart" data-timeframe="{{ timeframe }}">
+            <header>
+              <div>
+                <strong>{{ timeframe|label }}</strong>
+                <small data-chart-summary>正在加载行情</small>
+              </div>
+              <span class="state" data-chart-status>加载中</span>
+            </header>
+            <div class="chart-canvas-wrap">
+              <canvas data-kline-canvas role="img" aria-label="{{ timeframe|label }} K 线、均线、结构与交易标记"></canvas>
+              <div class="chart-empty" data-chart-empty hidden></div>
+            </div>
+          </article>
+          {% endfor %}
+          <details class="auxiliary-frame">
+            <summary>
+              <span><strong>5 分钟辅助观察</strong><small>缺失不会阻塞核心交易链路</small></span>
+              <span class="detail-toggle">展开图表</span>
+            </summary>
+            <article class="timeframe-chart" data-timeframe="5m">
+              <header>
+                <div>
+                  <strong>5 分钟</strong>
+                  <small data-chart-summary>按需加载展示</small>
+                </div>
+                <span class="state" data-chart-status>待展开</span>
+              </header>
+              <div class="chart-canvas-wrap">
+                <canvas data-kline-canvas role="img" aria-label="5 分钟 K 线辅助图"></canvas>
+                <div class="chart-empty" data-chart-empty hidden></div>
+              </div>
+            </article>
+          </details>
+        </div>
+        <footer class="chart-legend" aria-label="图例">
+          <span><i class="legend-ma20"></i>MA20</span>
+          <span><i class="legend-ma60"></i>MA60</span>
+          <span><i class="legend-structure"></i>结构事件</span>
+          <span><i class="legend-signal"></i>交易建议</span>
+          <span><i class="legend-risk"></i>持仓风险线</span>
+        </footer>
+      </section>
+
+      <section class="panel replay-panel">
+        <div class="panel-head">
+          <div class="panel-head-copy"><h2>时间回放</h2><span>逐根查看当前可见窗口，不改变状态机结果。</span></div>
+          <span data-replay-time>尚未开始</span>
+        </div>
+        <div class="replay-controls">
+          <button type="button" data-replay-toggle>开始回放</button>
+          <button type="button" class="secondary" data-replay-step>单步</button>
+          <button type="button" class="secondary" data-replay-reset>重置</button>
+          <label>速度
+            <select data-replay-speed>
+              <option value="1200">0.5×</option>
+              <option value="700" selected>1×</option>
+              <option value="350">2×</option>
+            </select>
+          </label>
+          <button type="button" class="ghost" data-export-frame>导出当前帧 JSON</button>
+        </div>
+      </section>
+    </main>
+
+    <aside class="workbench-inspector panel">
+      <div class="inspector-tabs" role="tablist" aria-label="工作台信息">
+        {% for key, text in [("state", "状态"), ("events", "结构"), ("playbook", "剧本"), ("risk", "风控"), ("replay", "回放"), ("debug", "调试")] %}
+        <button type="button" role="tab" data-inspector-tab="{{ key }}" aria-selected="{{ 'true' if loop.first else 'false' }}">{{ text }}</button>
+        {% endfor %}
+      </div>
+      <div class="inspector-body">
+        <section data-inspector-panel="state"><div class="loading-block">正在加载状态</div></section>
+        <section data-inspector-panel="events" hidden><div class="loading-block">正在加载结构</div></section>
+        <section data-inspector-panel="playbook" hidden><div class="loading-block">正在加载剧本</div></section>
+        <section data-inspector-panel="risk" hidden><div class="loading-block">正在加载风控</div></section>
+        <section data-inspector-panel="replay" hidden>
+          <div class="inspector-section">
+            <h2>当前回放窗口</h2>
+            <dl class="inspector-list" data-replay-summary>
+              <div><dt>状态</dt><dd>尚未开始</dd></div>
+            </dl>
+          </div>
+        </section>
+        <section data-inspector-panel="debug" hidden><div class="loading-block">正在加载调试信息</div></section>
+      </div>
+    </aside>
+  </div>
+</div>
+{% endblock %}

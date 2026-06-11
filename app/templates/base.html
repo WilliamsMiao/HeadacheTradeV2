@@ -21,6 +21,7 @@
     </a>
     <nav aria-label="主导航">
       <a href="/" {% if request.url.path == "/" %}aria-current="page"{% endif %}>看板</a>
+      <a href="/workbench" {% if request.url.path.startswith("/workbench") %}aria-current="page"{% endif %}>多周期工作台</a>
       <a href="/risk" {% if request.url.path == "/risk" %}aria-current="page"{% endif %}>风控设置</a>
       <a href="/opend" {% if request.url.path == "/opend" %}aria-current="page"{% endif %}>OpenD 管理</a>
     </nav>

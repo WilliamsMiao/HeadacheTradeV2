@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     futu_port: int = 11111
     futu_market: str = "US"
     futu_watchlist_group: str = ""
+    futu_include_5m: bool = False
     market_filter_symbols: str = "SPY,QQQ"
     public_base_url: str = "http://127.0.0.1:8001"
 
@@ -27,4 +28,3 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-
