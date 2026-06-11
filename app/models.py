@@ -207,6 +207,34 @@ class ReviewStat(Base, TimestampMixin):
     value: Mapped[float] = mapped_column(Float)
 
 
+class BacktestTrade(Base, TimestampMixin):
+    __tablename__ = "backtest_trades"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    run_id: Mapped[str] = mapped_column(String(64), index=True)
+    symbol: Mapped[str] = mapped_column(String(32), index=True)
+    script: Mapped[str] = mapped_column(String(48), default="")
+    source_structure_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    structure_type: Mapped[str] = mapped_column(String(48), default="")
+    structure_ts: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    trigger_timeframe: Mapped[str] = mapped_column(String(16), default="")
+    trigger_reason: Mapped[str] = mapped_column(Text, default="")
+    entry_ts: Mapped[datetime] = mapped_column(DateTime, index=True)
+    entry_price: Mapped[float] = mapped_column(Float)
+    stop_price: Mapped[float] = mapped_column(Float)
+    shares: Mapped[int] = mapped_column(Integer)
+    risk_amount: Mapped[float] = mapped_column(Float)
+    exit_ts: Mapped[datetime] = mapped_column(DateTime, index=True)
+    exit_price: Mapped[float] = mapped_column(Float)
+    exit_reason: Mapped[str] = mapped_column(Text)
+    max_r: Mapped[float] = mapped_column(Float)
+    min_r: Mapped[float] = mapped_column(Float)
+    final_r: Mapped[float] = mapped_column(Float)
+    holding_bars: Mapped[int] = mapped_column(Integer)
+    market_state_at_entry: Mapped[str] = mapped_column(String(32), default="")
+    stock_trend_at_entry: Mapped[str] = mapped_column(String(32), default="")
+
+
 class SystemConfig(Base, TimestampMixin):
     __tablename__ = "system_configs"
 
