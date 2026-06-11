@@ -167,6 +167,10 @@ def _latest_structure_events(session: Session) -> list[StructureEvent]:
     candidates = list(
         session.scalars(
             select(StructureEvent)
+            .join(
+                CandidateStock,
+                (CandidateStock.symbol == StructureEvent.symbol) & CandidateStock.active.is_(True),
+            )
             .where(StructureEvent.timeframe == STRUCTURE_TIMEFRAME)
             .order_by(StructureEvent.symbol, StructureEvent.event_ts.desc())
         )

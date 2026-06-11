@@ -235,20 +235,33 @@ def candidates_page(request: Request, pool: str = "", session: Session = Depends
 
 
 @app.get("/structures", response_class=HTMLResponse)
-def structures_page(request: Request, session: Session = Depends(get_session)):
-    events = list(
-        session.scalars(
+def structures_page(request: Request, scope: str = "active", session: Session = Depends(get_session)):
+    scope = scope if scope in {"active", "history"} else "active"
+    query = (
+        select(StructureEvent)
+        .where(StructureEvent.timeframe == STRUCTURE_TIMEFRAME)
+        .order_by(StructureEvent.event_ts.desc())
+        .limit(300)
+    )
+    if scope == "active":
+        query = (
             select(StructureEvent)
+            .join(
+                CandidateStock,
+                (CandidateStock.symbol == StructureEvent.symbol) & CandidateStock.active.is_(True),
+            )
             .where(StructureEvent.timeframe == STRUCTURE_TIMEFRAME)
             .order_by(StructureEvent.event_ts.desc())
             .limit(300)
         )
+    events = list(
+        session.scalars(query)
     )
     daily_states = _latest_daily_states(session)
     return templates.TemplateResponse(
         request,
         "structures.html",
-        {"events": events, "daily_states": daily_states},
+        {"events": events, "daily_states": daily_states, "selected_scope": scope},
     )
 
 
