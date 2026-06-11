@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+<header class="page-header compact">
+  <div><h1>模拟订单</h1><p>仅展示 Futu 模拟交易环境订单；系统没有真实盘下单入口。</p></div>
+</header>
+<section class="panel">
+  <div class="panel-head"><div class="panel-head-copy"><h2>订单记录</h2><span>订单状态由 30 秒模拟交易循环同步</span></div><small>{{ orders|length }} 条</small></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>订单</th><th>标的</th><th>方向</th><th>数量</th><th>限价</th><th>成交均价</th><th>状态</th><th>提交时间</th><th>原因</th></tr></thead>
+    <tbody>
+    {% for order in orders %}
+      <tr><td>{{ order.futu_order_id or order.id }}</td><td class="symbol-cell">{{ order.symbol }}</td><td>{{ order.side }}</td><td>{{ order.qty }}</td><td>{{ order.limit_price|price }}</td><td>{{ order.dealt_avg_price|price }}</td><td><span class="state">{{ order.status|label }}</span></td><td>{{ order.submitted_at|system_dt }}</td><td>{{ order.reason }}</td></tr>
+    {% else %}
+      <tr><td colspan="9"><div class="empty"><strong>暂无模拟订单</strong><span>规则审批通过并提交 Futu 模拟盘后会显示在这里。</span></div></td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+{% endblock %}

@@ -17,6 +17,7 @@ from app.services.pipeline import (
 )
 from app.services.trade_plan import generate_trade_plans
 from app.services.pipeline_lock import PipelineBusyError, pipeline_lock
+from app.services.sim_loop import run_sim_loop
 
 
 COMMANDS = (
@@ -32,6 +33,12 @@ COMMANDS = (
     "run-60m",
     "run-pipeline",
     "run-backtest",
+    "monitor-60m",
+    "validate-trade-plans",
+    "execute-sim-orders",
+    "sync-sim-orders",
+    "manage-positions",
+    "run-sim-loop",
 )
 
 
@@ -65,6 +72,16 @@ def main() -> None:
                     payload = run_daily(session, settings, args.mock)
                 elif args.command == "run-60m":
                     payload = run_60m(session, settings, args.mock)
+                elif args.command == "monitor-60m":
+                    payload = run_60m(session, settings, args.mock)
+                elif args.command in {
+                    "validate-trade-plans",
+                    "execute-sim-orders",
+                    "sync-sim-orders",
+                    "manage-positions",
+                    "run-sim-loop",
+                }:
+                    payload = run_sim_loop(session, settings, args.mock)
                 elif args.command == "run-pipeline":
                     payload = run_pipeline(session, settings)
                 else:

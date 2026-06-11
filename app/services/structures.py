@@ -112,16 +112,23 @@ def _detect_at_index(
     lows = [item[0].low for item in lookback]
     highs = [item[0].high for item in lookback]
     difs = [item[1].macd_dif for item in lookback if item[1].macd_dif is not None]
-    if not lows or not highs or not difs or previous_i.macd_hist is None:
+    if not lows or not highs or not difs or previous_i.macd_hist is None or not current_i.atr:
         return []
 
     hist_improving = current_i.macd_hist > previous_i.macd_hist
     hist_weakening = current_i.macd_hist < previous_i.macd_hist
     expiry = current_bar.ts + timedelta(days=config.structure_expiry_days)
 
-    near_low = current_bar.low <= min(lows) * config.near_low_ratio
+    stage_low = min(lows)
+    stage_high = max(highs)
+    atr = current_i.atr
+    near_low = current_bar.low <= stage_low + config.near_low_atr_multiple * atr
+    bottom_pre_move = (
+        (stage_high - current_bar.low) / max(stage_high, 0.0001) >= config.minimum_pre_move_pct
+        or stage_high - current_bar.low >= config.minimum_pre_move_atr * atr
+    )
     dif_higher_low = current_i.macd_dif > min(difs)
-    if bottom_passivation is None and bottom_structure is None and near_low and dif_higher_low and hist_improving:
+    if bottom_passivation is None and bottom_structure is None and near_low and bottom_pre_move and dif_higher_low and hist_improving:
         pivot_low = min(current_bar.low, min(lows))
         bottom_passivation_detection = StructureDetection(
             symbol=current_bar.symbol,
@@ -140,9 +147,13 @@ def _detect_at_index(
         detections.append(bottom_passivation_detection)
         bottom_passivation = bottom_passivation_detection
 
-    near_high = current_bar.high >= max(highs) * config.near_high_ratio
+    near_high = current_bar.high >= stage_high - config.near_high_atr_multiple * atr
+    top_pre_move = (
+        (current_bar.high - stage_low) / max(stage_low, 0.0001) >= config.minimum_pre_move_pct
+        or current_bar.high - stage_low >= config.minimum_pre_move_atr * atr
+    )
     dif_lower_high = current_i.macd_dif < max(difs)
-    if top_passivation is None and top_structure is None and near_high and dif_lower_high and hist_weakening:
+    if top_passivation is None and top_structure is None and near_high and top_pre_move and dif_lower_high and hist_weakening:
         pivot_high = max(current_bar.high, max(highs))
         top_passivation_detection = StructureDetection(
             symbol=current_bar.symbol,

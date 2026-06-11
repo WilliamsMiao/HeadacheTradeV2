@@ -24,6 +24,7 @@ from app.auth import (
 )
 from app.models import (
     ApprovalRecord,
+    AuditLog,
     BattlePoolItem,
     CandidateStock,
     DailyState,
@@ -33,6 +34,7 @@ from app.models import (
     Position,
     ReviewStat,
     RiskConfig,
+    SimOrder,
     StateTransitionLog,
     StockTrend,
     StructureEvent,
@@ -285,11 +287,29 @@ def trade_plans_page(request: Request, session: Session = Depends(get_session)):
     plans = list(
         session.scalars(
             select(TradePlan)
-            .where(TradePlan.status == "ACTIVE")
+            .where(TradePlan.status != "EXPIRED")
             .order_by(_trade_plan_priority_order(), TradePlan.updated_at.desc())
         )
     )
     return templates.TemplateResponse(request, "trade_plans.html", {"plans": plans})
+
+
+@app.get("/sim-orders", response_class=HTMLResponse)
+def sim_orders_page(request: Request, session: Session = Depends(get_session)):
+    orders = list(session.scalars(select(SimOrder).order_by(SimOrder.submitted_at.desc()).limit(300)))
+    return templates.TemplateResponse(request, "sim_orders.html", {"orders": orders})
+
+
+@app.get("/positions", response_class=HTMLResponse)
+def positions_page(request: Request, session: Session = Depends(get_session)):
+    positions = list(session.scalars(select(Position).order_by(Position.updated_at.desc()).limit(300)))
+    return templates.TemplateResponse(request, "positions.html", {"positions": positions})
+
+
+@app.get("/journal", response_class=HTMLResponse)
+def journal_page(request: Request, session: Session = Depends(get_session)):
+    logs = list(session.scalars(select(AuditLog).order_by(AuditLog.created_at.desc()).limit(500)))
+    return templates.TemplateResponse(request, "journal.html", {"logs": logs})
 
 
 @app.get("/market", response_class=HTMLResponse)
@@ -599,7 +619,11 @@ def _dashboard_context(session: Session) -> dict[str, object]:
     plans = list(
         session.scalars(
             select(TradePlan)
-            .where(TradePlan.status == "ACTIVE")
+            .where(
+                TradePlan.status.in_(
+                    {"PLANNED", "ACTIVE", "ARMED", "WAIT_PULLBACK", "NO_CHASE", "TRIGGERED", "ORDER_SUBMITTED", "IN_POSITION", "WAITLIST", "MISSED_BY_CAPITAL"}
+                )
+            )
             .order_by(_trade_plan_priority_order(), TradePlan.updated_at.desc())
             .limit(6)
         )
@@ -611,8 +635,15 @@ def _dashboard_context(session: Session) -> dict[str, object]:
     summary = {
         "candidate_count": session.query(CandidateStock).filter(CandidateStock.active.is_(True)).count(),
         "battle_count": session.query(BattlePoolItem).filter(BattlePoolItem.status == "ACTIVE").count(),
-        "plan_count": session.query(TradePlan).filter(TradePlan.status == "ACTIVE").count(),
+        "plan_count": session.query(TradePlan).filter(
+            TradePlan.status.in_(
+                {"PLANNED", "ACTIVE", "ARMED", "WAIT_PULLBACK", "NO_CHASE", "TRIGGERED", "ORDER_SUBMITTED", "IN_POSITION", "WAITLIST", "MISSED_BY_CAPITAL"}
+            )
+        ).count(),
         "open_positions": len(positions),
+        "waitlist_count": session.query(TradePlan).filter(TradePlan.status.in_({"WAITLIST", "MISSED_BY_CAPITAL"})).count(),
+        "sim_mode": "SIM_TRADING" if settings.enable_sim_trading else "SIM_DISABLED",
+        "real_trading": "DISABLED",
     }
     return {
         "market": market,

@@ -6,11 +6,13 @@ class StructureConfig:
     lookback_bars: int = 30
     confirmation_bars: int = 8
     minimum_history_bars: int = 40
-    near_low_ratio: float = 1.03
-    near_high_ratio: float = 0.97
+    near_low_atr_multiple: float = 0.8
+    near_high_atr_multiple: float = 0.8
+    minimum_pre_move_atr: float = 2.0
+    minimum_pre_move_pct: float = 0.06
     minimum_volume_ratio: float = 0.65
     structure_expiry_days: int = 14
-    script_version: str = "macd-structure-v1"
+    script_version: str = "macd-structure-v2"
 
 
 @dataclass(frozen=True)
