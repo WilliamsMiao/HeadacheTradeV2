@@ -69,6 +69,14 @@ from app.services.workbench import (
     state_payload,
     workbench_watchlist,
 )
+from app.services.command_center import command_center_payload
+from app.services.view_models import (
+    battle_view_models,
+    candidate_view_models,
+    order_view_models,
+    position_view_models,
+    trade_plan_groups,
+)
 from app.presentation import (
     describe_market_state,
     describe_market_reason,
@@ -232,7 +240,7 @@ def candidates_page(request: Request, pool: str = "", session: Session = Depends
         request,
         "candidates.html",
         {
-            "items": items,
+            "items": candidate_view_models(session, items),
             "selected_pool": pool,
             "pool_counts": _candidate_pool_counts(session),
         },
@@ -279,7 +287,7 @@ def battle_pool_page(request: Request, session: Session = Depends(get_session)):
             .order_by(BattlePoolItem.score.desc(), BattlePoolItem.symbol)
         )
     )
-    return templates.TemplateResponse(request, "battle_pool.html", {"items": items})
+    return templates.TemplateResponse(request, "battle_pool.html", {"items": battle_view_models(session, items)})
 
 
 @app.get("/trade-plans", response_class=HTMLResponse)
@@ -291,19 +299,19 @@ def trade_plans_page(request: Request, session: Session = Depends(get_session)):
             .order_by(_trade_plan_priority_order(), TradePlan.updated_at.desc())
         )
     )
-    return templates.TemplateResponse(request, "trade_plans.html", {"plans": plans})
+    return templates.TemplateResponse(request, "trade_plans.html", {"plans": plans, "groups": trade_plan_groups(plans)})
 
 
 @app.get("/sim-orders", response_class=HTMLResponse)
 def sim_orders_page(request: Request, session: Session = Depends(get_session)):
     orders = list(session.scalars(select(SimOrder).order_by(SimOrder.submitted_at.desc()).limit(300)))
-    return templates.TemplateResponse(request, "sim_orders.html", {"orders": orders})
+    return templates.TemplateResponse(request, "sim_orders.html", {"orders": order_view_models(session, orders)})
 
 
 @app.get("/positions", response_class=HTMLResponse)
 def positions_page(request: Request, session: Session = Depends(get_session)):
     positions = list(session.scalars(select(Position).order_by(Position.updated_at.desc()).limit(300)))
-    return templates.TemplateResponse(request, "positions.html", {"positions": positions})
+    return templates.TemplateResponse(request, "positions.html", {"positions": position_view_models(session, positions)})
 
 
 @app.get("/journal", response_class=HTMLResponse)
@@ -656,6 +664,7 @@ def _dashboard_context(session: Session) -> dict[str, object]:
         "reviews": reviews,
         "approvals": approvals,
         "summary": summary,
+        "command": command_center_payload(session, settings),
     }
 
 

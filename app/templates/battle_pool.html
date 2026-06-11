@@ -1,25 +1,29 @@
 {% extends "base.html" %}
 {% block content %}
 <header class="page-header compact">
-  <div><h1>重点作战池</h1><p>综合日线支持、结构清晰度、时效、止损距离、流动性和多标签命中进行评级。</p></div>
-  <div class="header-actions"><a class="button-secondary" href="/trade-plans">查看交易计划</a></div>
+  <div><h1>结构作战池</h1><p>作战池来自已经出现 60 分钟结构的候选股。S/A/B/C 是结构作战优先级，不等于立即下单。</p></div>
+  <div class="header-actions"><a class="button-secondary" href="/trade-plans">查看执行计划</a></div>
 </header>
 <section class="panel">
-  <div class="panel-head"><div class="panel-head-copy"><h2>S / A / B / C 评级</h2><span>S 级最多 3 支，A 级最多 10 支；评分只用于筛选关注优先级</span></div><small>{{ items|length }} 支</small></div>
+  <div class="panel-head"><div class="panel-head-copy"><h2>作战评级</h2><span>只有 S/A 且通过实时校验、规则审批和资金闸门，才允许模拟交易</span></div><small>{{ items|length }} 支</small></div>
   <div class="battle-list">
-    {% for item in items %}
-    <article class="battle-row">
-      <span class="priority priority-{{ item.priority_level|lower }}">{{ item.priority_level }}</span>
+  {% for item in items %}
+  {% set record = item.record %}
+    <article class="battle-row battle-row-expanded">
+      <span class="priority priority-{{ record.priority_level|lower }}">{{ record.priority_level }}</span>
       <div class="battle-main">
-        <header><a href="/symbols/{{ item.symbol }}">{{ item.symbol }}</a><span class="state">{{ item.direction|label }}</span><span class="state">{{ item.daily_state|label }}</span><span class="state structure">{{ item.structure_type|label }}</span></header>
-        <p>{{ item.reason }}</p>
-        <small>下一步：{{ item.next_wait }}</small>
+        <header><a href="/symbols/{{ record.symbol }}">{{ record.symbol }}</a><span class="state">{{ record.direction|label }}</span><span class="state">{{ record.daily_state|label }}</span><span class="state structure">{{ record.structure_type|label }}</span>{% if item.plan %}<a class="text-link" href="/trade-plans#plan-{{ item.plan.id }}">已有计划</a>{% endif %}</header>
+        <p>{{ record.reason }}</p>
+        <strong class="next-action-line">下一步：{{ item.next_action }}</strong>
+        {% if item.breakdown %}
+        <details class="score-details"><summary>查看评分构成</summary><ul>{% for line in item.breakdown %}<li>{{ line }}</li>{% endfor %}</ul></details>
+        {% endif %}
       </div>
-      <div class="battle-score"><strong>{{ "%.1f"|format(item.score) }}</strong><span>综合评分</span></div>
+      <div class="battle-score"><strong>{{ "%.1f"|format(record.score) }}</strong><span>作战评分</span></div>
     </article>
-    {% else %}
-    <div class="empty"><strong>重点作战池为空</strong><span>结构扫描后会根据质量评级生成重点作战池。</span></div>
-    {% endfor %}
+  {% else %}
+    <div class="empty"><strong>作战池为空</strong><span>候选股出现有效 60 分钟结构并完成评分后会进入这里。</span></div>
+  {% endfor %}
   </div>
 </section>
 {% endblock %}
