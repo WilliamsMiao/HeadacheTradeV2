@@ -76,3 +76,19 @@ def test_distant_stop_downgrades_structure(session):
     score = score_structure_event(session, event)
     assert score.score < 85
     assert "止损距离过远" in score.reason
+
+
+def test_battle_pool_excludes_events_outside_active_candidate_pool(session):
+    active_event = seed_structure(session, symbol="ACTIVE")
+    legacy_event = seed_structure(session, symbol="LEGACY")
+    legacy_candidate = session.scalar(select(CandidateStock).where(CandidateStock.symbol == "LEGACY"))
+    legacy_candidate.active = False
+    session.commit()
+
+    rank_battle_pool(session)
+
+    active_item = session.scalar(select(BattlePoolItem).where(BattlePoolItem.symbol == active_event.symbol))
+    legacy_item = session.scalar(select(BattlePoolItem).where(BattlePoolItem.symbol == legacy_event.symbol))
+    assert active_item is not None
+    assert active_item.status == "ACTIVE"
+    assert legacy_item is None

@@ -5,7 +5,25 @@
   <div class="header-actions"><button data-task="run-pipeline" data-loading-text="正在扫描">重新扫描结构</button></div>
 </header>
 <section class="panel">
-  <div class="panel-head"><div class="panel-head-copy"><h2>最近结构</h2><span>确认位用于判断结构成立，失效位用于计划风控</span></div><small>{{ events|length }} 条</small></div>
+  <div class="panel-head">
+    <div class="panel-head-copy">
+      <h2>{{ "当前候选结构" if selected_scope == "active" else "全部历史结构" }}</h2>
+      <span>
+        {% if selected_scope == "active" %}
+        仅展示本轮有效候选池标的；确认位用于判断结构成立，失效位用于计划风控
+        {% else %}
+        包含旧自选股流程及已退出候选池的历史记录，仅供复盘，不进入当前作战池
+        {% endif %}
+      </span>
+    </div>
+    <div class="panel-actions">
+      <nav class="filter-tabs compact-tabs" aria-label="结构事件范围">
+        <a href="/structures?scope=active" {% if selected_scope == "active" %}aria-current="page"{% endif %}>当前候选</a>
+        <a href="/structures?scope=history" {% if selected_scope == "history" %}aria-current="page"{% endif %}>历史记录</a>
+      </nav>
+      <small>{{ events|length }} 条</small>
+    </div>
+  </div>
   <div class="table-wrap">
     <table>
       <thead><tr><th>股票</th><th>日线状态</th><th>60 分钟结构</th><th>阶段</th><th>时间</th><th>确认位</th><th>失效位</th><th>建议动作</th><th>原因</th></tr></thead>
@@ -23,7 +41,7 @@
           <td><p class="reason-short" title="{{ event.reason|reason }}">{{ event.reason|reason(72) }}</p></td>
         </tr>
         {% else %}
-        <tr><td colspan="9"><div class="empty"><strong>暂无结构事件</strong><span>先更新日线与 60 分钟行情、计算指标，再扫描结构。</span></div></td></tr>
+        <tr><td colspan="9"><div class="empty"><strong>暂无{{ "当前候选" if selected_scope == "active" else "历史" }}结构事件</strong><span>{% if selected_scope == "active" %}先生成候选池，再更新日线与 60 分钟行情并扫描结构。{% else %}数据库中还没有可供复盘的结构记录。{% endif %}</span></div></td></tr>
         {% endfor %}
       </tbody>
     </table>

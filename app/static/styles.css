@@ -595,6 +595,21 @@ a.summary-card:hover {
   gap: var(--space-1);
 }
 
+.panel-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.compact-tabs {
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.compact-tabs a {
+  min-height: 36px;
+}
+
 .toolbar {
   display: flex;
   align-items: center;

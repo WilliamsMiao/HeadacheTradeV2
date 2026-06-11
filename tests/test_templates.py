@@ -5,7 +5,16 @@ from datetime import date, datetime
 from app.db import init_db
 from app.db import SessionLocal
 from app.main import _dashboard_context, app
-from app.models import BattlePoolItem, CandidateStock, MarketState, SystemConfig, TradePlan, TradeSignal, WatchlistItem
+from app.models import (
+    BattlePoolItem,
+    CandidateStock,
+    MarketState,
+    StructureEvent,
+    SystemConfig,
+    TradePlan,
+    TradeSignal,
+    WatchlistItem,
+)
 
 
 def authenticated_client() -> TestClient:
@@ -41,6 +50,61 @@ def test_risk_page_groups_settings_in_chinese():
     assert "剧本调整" in response.text
     assert "仓位限制" in response.text
     assert "冷却机制" in response.text
+
+
+def test_structures_page_defaults_to_active_candidates_and_keeps_history_separate():
+    client = authenticated_client()
+    now = datetime(2026, 6, 11, 10, 0)
+    with SessionLocal() as session:
+        session.execute(delete(StructureEvent))
+        session.execute(delete(CandidateStock))
+        session.add_all(
+            [
+                CandidateStock(
+                    symbol="US.ACTIVE",
+                    name="Active",
+                    pool_type="TREND_UP",
+                    active=True,
+                    selected_at=now,
+                ),
+                CandidateStock(
+                    symbol="US.LEGACY",
+                    name="Legacy",
+                    pool_type="TREND_UP",
+                    active=False,
+                    selected_at=now,
+                ),
+                StructureEvent(
+                    symbol="US.ACTIVE",
+                    timeframe="60m",
+                    event_type="BOTTOM_STRUCTURE",
+                    event_ts=now,
+                    price=100,
+                    reason="active event",
+                ),
+                StructureEvent(
+                    symbol="US.LEGACY",
+                    timeframe="60m",
+                    event_type="TOP_STRUCTURE",
+                    event_ts=now,
+                    price=90,
+                    reason="legacy event",
+                ),
+            ]
+        )
+        session.commit()
+
+    active_response = client.get("/structures")
+    history_response = client.get("/structures?scope=history")
+
+    assert active_response.status_code == 200
+    assert "当前候选结构" in active_response.text
+    assert "US.ACTIVE" in active_response.text
+    assert "US.LEGACY" not in active_response.text
+    assert history_response.status_code == 200
+    assert "全部历史结构" in history_response.text
+    assert "US.ACTIVE" in history_response.text
+    assert "US.LEGACY" in history_response.text
 
 
 def test_opend_page_requires_auth_then_renders(monkeypatch):
