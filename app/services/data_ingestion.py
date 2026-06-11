@@ -98,14 +98,17 @@ def update_market_data(
     start: datetime | None = None,
     end: datetime | None = None,
     include_display_timeframes: bool = False,
+    timeframes: tuple[str, ...] | None = None,
     on_progress: Callable[[int, int, str], None] | None = None,
 ) -> dict[str, str]:
     results: dict[str, str] = {}
-    timeframes = (*CORE_TIMEFRAMES, *DISPLAY_TIMEFRAMES) if include_display_timeframes else CORE_TIMEFRAMES
-    total = len(symbols) * len(timeframes)
+    selected_timeframes = timeframes or (
+        (*CORE_TIMEFRAMES, *DISPLAY_TIMEFRAMES) if include_display_timeframes else CORE_TIMEFRAMES
+    )
+    total = len(symbols) * len(selected_timeframes)
     completed = 0
     for symbol in symbols:
-        for timeframe in timeframes:
+        for timeframe in selected_timeframes:
             key = f"{symbol}:{timeframe}"
             try:
                 bars = provider.get_klines(symbol, timeframe, start, end)

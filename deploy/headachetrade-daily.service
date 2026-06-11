@@ -1,0 +1,16 @@
+[Unit]
+Description=HeadacheTradeV2 daily pre-market scan
+After=network-online.target futu-opend.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=headachetrade
+Group=headachetrade
+WorkingDirectory=/opt/headachetrade/current
+EnvironmentFile=/etc/headachetrade/headachetrade.env
+RuntimeDirectory=headachetrade
+RuntimeDirectoryMode=0755
+ExecStart=/opt/headachetrade/current/.venv/bin/python -m app.cli run-daily
+TimeoutStartSec=3h
+

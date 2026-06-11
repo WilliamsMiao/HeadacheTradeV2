@@ -48,6 +48,7 @@ def run_update_market_data(
     settings: Settings,
     use_mock: bool = False,
     on_progress: Callable[[int, int, str], None] | None = None,
+    timeframes: tuple[str, ...] | None = None,
 ) -> dict[str, object]:
     provider = get_provider(settings, use_mock)
     try:
@@ -60,6 +61,7 @@ def run_update_market_data(
             provider,
             symbols,
             include_display_timeframes=False,
+            timeframes=timeframes,
             on_progress=on_progress,
         )
         failures = {
@@ -81,10 +83,14 @@ def run_update_market_data(
             close()
 
 
-def run_compute_indicators(session: Session, settings: Settings) -> int:
+def run_compute_indicators(
+    session: Session,
+    settings: Settings,
+    timeframes: tuple[str, ...] = CORE_TIMEFRAMES,
+) -> int:
     count = 0
     for symbol in candidate_symbols(session, include_market=settings.market_symbols):
-        for timeframe in CORE_TIMEFRAMES:
+        for timeframe in timeframes:
             count += compute_indicators_for_symbol(session, symbol, timeframe)
     return count
 
@@ -162,8 +168,14 @@ def run_60m(
     use_mock: bool = False,
     on_progress: Callable[[int, int, str], None] | None = None,
 ) -> dict[str, object]:
-    market_data = run_update_market_data(session, settings, use_mock, on_progress)
-    indicators = run_compute_indicators(session, settings)
+    market_data = run_update_market_data(
+        session,
+        settings,
+        use_mock,
+        timeframes=(STRUCTURE_TIMEFRAME,),
+        on_progress=on_progress,
+    )
+    indicators = run_compute_indicators(session, settings, timeframes=(STRUCTURE_TIMEFRAME,))
     pipeline = run_pipeline(session, settings)
     return {"market_data": market_data, "indicators": indicators, "pipeline": pipeline}
 

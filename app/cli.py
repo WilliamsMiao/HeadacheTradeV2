@@ -16,6 +16,7 @@ from app.services.pipeline import (
     run_update_market_data,
 )
 from app.services.trade_plan import generate_trade_plans
+from app.services.pipeline_lock import PipelineBusyError, pipeline_lock
 
 
 COMMANDS = (
@@ -41,31 +42,35 @@ def main() -> None:
     args = parser.parse_args()
     settings = get_settings()
     init_db()
-    with SessionLocal() as session:
-        if args.command == "init-db":
-            payload = {"status": "ok"}
-        elif args.command == "screen-market":
-            payload = run_screen_market(session, settings, args.mock)
-        elif args.command == "update-core-kline":
-            payload = run_update_market_data(session, settings, args.mock)
-        elif args.command == "compute-indicators":
-            payload = {"computed": run_compute_indicators(session, settings)}
-        elif args.command == "scan-structures":
-            payload = run_scan_structures(session, settings)
-        elif args.command == "rank-battle-pool":
-            payload = rank_battle_pool(session)
-        elif args.command == "generate-trade-plans":
-            payload = generate_trade_plans(session)
-        elif args.command == "set-price-alerts":
-            payload = run_set_price_alerts(session, settings, args.mock)
-        elif args.command == "run-daily":
-            payload = run_daily(session, settings, args.mock)
-        elif args.command == "run-60m":
-            payload = run_60m(session, settings, args.mock)
-        elif args.command == "run-pipeline":
-            payload = run_pipeline(session, settings)
-        else:
-            payload = run_backtest(session, settings)
+    try:
+        with pipeline_lock():
+            with SessionLocal() as session:
+                if args.command == "init-db":
+                    payload = {"status": "ok"}
+                elif args.command == "screen-market":
+                    payload = run_screen_market(session, settings, args.mock)
+                elif args.command == "update-core-kline":
+                    payload = run_update_market_data(session, settings, args.mock)
+                elif args.command == "compute-indicators":
+                    payload = {"computed": run_compute_indicators(session, settings)}
+                elif args.command == "scan-structures":
+                    payload = run_scan_structures(session, settings)
+                elif args.command == "rank-battle-pool":
+                    payload = rank_battle_pool(session)
+                elif args.command == "generate-trade-plans":
+                    payload = generate_trade_plans(session)
+                elif args.command == "set-price-alerts":
+                    payload = run_set_price_alerts(session, settings, args.mock)
+                elif args.command == "run-daily":
+                    payload = run_daily(session, settings, args.mock)
+                elif args.command == "run-60m":
+                    payload = run_60m(session, settings, args.mock)
+                elif args.command == "run-pipeline":
+                    payload = run_pipeline(session, settings)
+                else:
+                    payload = run_backtest(session, settings)
+    except PipelineBusyError as exc:
+        payload = {"status": "skipped", "reason": str(exc)}
     print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
 
 
