@@ -193,12 +193,22 @@
         <span class="state pending">{{ signal.status|label }}</span>
       </header>
       <p title="{{ signal.reason|reason }}">{{ signal.reason|reason }}</p>
+      {% if signal.source_structure_id %}
+      <div class="signal-source">
+        <span>60 分钟结构 #{{ signal.source_structure_id }}</span>
+        <span>{{ signal.trigger_timeframe|label }}触发 {{ signal.trigger_ts|dt }}</span>
+        <span>突破参考 {{ signal.trigger_level|price }}</span>
+      </div>
+      {% endif %}
       <dl class="metric-grid">
         <div><dt>建议入场</dt><dd>{{ signal.entry_price|price }}</dd></div>
         <div><dt>初始止损</dt><dd>{{ signal.stop_price|price }}</dd></div>
         <div><dt>建议股数</dt><dd>{{ signal.shares|shares }}</dd></div>
         <div><dt>仓位占比</dt><dd>{{ signal.target_position_pct|percent }}</dd></div>
-        <div><dt>风险金额</dt><dd>{{ signal.risk_amount|money }}</dd></div>
+        <div><dt>实际风险</dt><dd>{{ signal.risk_amount|money }}</dd></div>
+        <div><dt>允许亏损</dt><dd>{{ signal.allowed_loss|money }}</dd></div>
+        <div><dt>每股风险</dt><dd>{{ signal.risk_per_share|money }}</dd></div>
+        <div><dt>建议市值</dt><dd>{{ signal.position_value|money }}</dd></div>
         <div><dt>展示评分</dt><dd>{{ signal.score_display or "-" }}</dd></div>
       </dl>
       <footer>
