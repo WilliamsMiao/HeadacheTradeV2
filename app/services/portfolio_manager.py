@@ -1,10 +1,12 @@
+import json
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import Settings
-from app.models import Position, SimOrder, TradePlan
+from app.models import Position, SimOrder, SystemConfig, TradePlan
 
 
 @dataclass(frozen=True)
@@ -17,17 +19,38 @@ class PortfolioState:
 
 
 def get_portfolio_state(session: Session, trade_provider, settings: Settings) -> PortfolioState:
-    account = trade_provider.get_account_info() if trade_provider else {}
-    available_cash = float(account.get("cash") or account.get("power") or 0)
-    positions = list(session.scalars(select(Position).where(Position.status == "OPEN")))
-    orders = list(session.scalars(select(SimOrder).where(SimOrder.status.in_({"SUBMITTED", "PARTIALLY_FILLED"}))))
-    if len(positions) >= settings.max_positions:
-        status, reason = "CAPITAL_FULL", "已达到最大持仓数"
-    elif available_cash <= 0 and trade_provider:
-        status, reason = "CAPITAL_LIMITED", "模拟账户可用资金不足"
-    else:
-        status, reason = "CAPITAL_AVAILABLE", "资金允许评估新计划"
-    return PortfolioState(status, available_cash, len(positions), len(orders), reason)
+    try:
+        account = trade_provider.get_account_info() if trade_provider else {}
+        remote_positions = trade_provider.get_positions() if trade_provider else []
+        remote_orders = trade_provider.get_open_orders() if trade_provider else []
+        available_cash = float(account.get("cash") or account.get("power") or 0)
+        positions = list(session.scalars(select(Position).where(Position.status == "OPEN")))
+        orders = list(session.scalars(select(SimOrder).where(SimOrder.status.in_({"SUBMITTED", "PARTIALLY_FILLED"}))))
+        if len(positions) >= settings.max_positions:
+            status, reason = "CAPITAL_FULL", "已达到最大持仓数"
+        elif available_cash <= 0 and trade_provider:
+            status, reason = "CAPITAL_LIMITED", "模拟账户可用资金不足"
+        else:
+            status, reason = "CAPITAL_AVAILABLE", "资金允许评估新计划"
+        state = PortfolioState(status, available_cash, len(positions), len(orders), reason)
+        _save_portfolio_sync(
+            session,
+            ok=True,
+            state=state,
+            remote_positions=len(remote_positions),
+            remote_orders=len(remote_orders),
+        )
+        return state
+    except Exception as exc:
+        state = PortfolioState(
+            "CAPITAL_UNKNOWN",
+            0,
+            0,
+            0,
+            f"无法确认模拟账户资金、持仓或未成交订单：{exc}",
+        )
+        _save_portfolio_sync(session, ok=False, state=state, error=str(exc))
+        return state
 
 
 def capital_allows_new_order(
@@ -65,3 +88,57 @@ def rank_waitlisted_plans(session: Session) -> list[TradePlan]:
         plan.waitlist_rank = index
     session.commit()
     return plans
+
+
+def portfolio_sync_status(session: Session) -> dict:
+    record = session.scalar(select(SystemConfig).where(SystemConfig.key == "portfolio_sync_status"))
+    if not record:
+        return {"ok": False, "status": "CAPITAL_UNKNOWN", "error": "尚未同步 Futu 模拟账户", "updated_at": None}
+    try:
+        return json.loads(record.value)
+    except json.JSONDecodeError:
+        return {"ok": False, "status": "CAPITAL_UNKNOWN", "error": "组合账户同步状态损坏", "updated_at": None}
+
+
+def check_sim_account_connection(session: Session, trade_provider, settings: Settings) -> dict:
+    state = get_portfolio_state(session, trade_provider, settings)
+    saved = portfolio_sync_status(session)
+    return {
+        "ok": bool(saved.get("ok")),
+        "status": state.status,
+        "account_connected": bool(saved.get("ok")),
+        "positions_connected": bool(saved.get("ok")),
+        "open_orders_connected": bool(saved.get("ok")),
+        "remote_positions": saved.get("remote_positions", 0),
+        "remote_orders": saved.get("remote_orders", 0),
+        "updated_at": saved.get("updated_at"),
+        "error": saved.get("error", ""),
+    }
+
+
+def _save_portfolio_sync(
+    session: Session,
+    *,
+    ok: bool,
+    state: PortfolioState,
+    remote_positions: int = 0,
+    remote_orders: int = 0,
+    error: str = "",
+) -> None:
+    record = session.scalar(select(SystemConfig).where(SystemConfig.key == "portfolio_sync_status"))
+    if record is None:
+        record = SystemConfig(key="portfolio_sync_status")
+        session.add(record)
+    record.value = json.dumps({
+        "ok": ok,
+        "status": state.status,
+        "available_cash": state.available_cash,
+        "open_positions": state.open_positions,
+        "open_orders": state.open_orders,
+        "remote_positions": remote_positions,
+        "remote_orders": remote_orders,
+        "reason": state.reason,
+        "error": error,
+        "updated_at": datetime.now(UTC).isoformat(),
+    }, ensure_ascii=False)
+    session.commit()

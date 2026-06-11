@@ -1248,6 +1248,60 @@ td a + small {
   color: var(--color-danger);
 }
 
+.execution-gates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.execution-gates span {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-subtle);
+  padding: var(--space-1) var(--space-2);
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.block-reason-line {
+  border-left: 3px solid var(--color-warning);
+  padding-left: var(--space-3);
+}
+
+.entry-checks {
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-3);
+}
+
+.entry-checks summary {
+  cursor: pointer;
+  color: var(--color-primary);
+  font-weight: 650;
+}
+
+.entry-checks ul {
+  display: grid;
+  gap: var(--space-2);
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.entry-checks li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  color: var(--color-text-secondary);
+}
+
+.entry-checks li.passed strong {
+  color: var(--color-success);
+}
+
+.entry-checks li.failed strong {
+  color: var(--color-danger);
+}
+
 .blocked-list {
   display: grid;
   border: 1px solid var(--color-border);

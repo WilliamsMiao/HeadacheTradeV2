@@ -18,6 +18,8 @@ from app.services.pipeline import (
 from app.services.trade_plan import generate_trade_plans
 from app.services.pipeline_lock import PipelineBusyError, pipeline_lock
 from app.services.sim_loop import run_sim_loop
+from app.providers.futu_trade_provider import FutuTradeProvider
+from app.services.portfolio_manager import check_sim_account_connection
 
 
 COMMANDS = (
@@ -39,6 +41,7 @@ COMMANDS = (
     "sync-sim-orders",
     "manage-positions",
     "run-sim-loop",
+    "check-sim-account",
 )
 
 
@@ -82,6 +85,12 @@ def main() -> None:
                     "run-sim-loop",
                 }:
                     payload = run_sim_loop(session, settings, args.mock)
+                elif args.command == "check-sim-account":
+                    provider = FutuTradeProvider(settings)
+                    try:
+                        payload = check_sim_account_connection(session, provider, settings)
+                    finally:
+                        provider.close()
                 elif args.command == "run-pipeline":
                     payload = run_pipeline(session, settings)
                 else:

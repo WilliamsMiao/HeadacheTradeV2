@@ -24,6 +24,34 @@ def test_trade_plan_next_action_explains_price_gate():
     assert "103.00" in text
 
 
+def test_trade_plan_next_action_does_not_wait_for_breakout_inside_price_gate():
+    plan = SimpleNamespace(
+        status="ACTIVE",
+        current_price=101,
+        breakout_entry_price=100,
+        no_chase_above=102,
+        rules_reject_reason="",
+        capital_status="CAPITAL_AVAILABLE",
+        capital_reason="",
+    )
+    text = describe_trade_plan_next_action(plan)
+    assert "等待价格突破" not in text
+    assert "价格条件满足，但计划尚未完成实时校验" in text
+
+
+def test_trade_plan_next_action_blocks_unknown_capital():
+    plan = SimpleNamespace(
+        status="TRIGGERED",
+        current_price=101,
+        breakout_entry_price=100,
+        no_chase_above=102,
+        rules_reject_reason="",
+        capital_status="CAPITAL_UNKNOWN",
+        capital_reason="",
+    )
+    assert "资金状态未知，禁止下单" in describe_trade_plan_next_action(plan)
+
+
 def test_position_next_action_prioritizes_stop_risk():
     position = SimpleNamespace(current_r=-0.8, partial_exit_done=False)
     assert "接近止损" in describe_position_next_action(position)

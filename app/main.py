@@ -71,6 +71,7 @@ from app.services.workbench import (
 )
 from app.services.command_center import command_center_payload
 from app.services.plan_prices import refresh_trade_plan_prices
+from app.services.portfolio_manager import portfolio_sync_status
 from app.providers.futu_provider import FutuProvider
 from app.services.view_models import (
     battle_view_models,
@@ -432,12 +433,16 @@ def risk_page(request: Request, session: Session = Depends(get_session)):
 
 
 @app.get("/opend", response_class=HTMLResponse)
-def opend_page(request: Request):
+def opend_page(request: Request, session: Session = Depends(get_session)):
     status_result = opend_admin.status()
     return templates.TemplateResponse(
         request,
         "opend.html",
-        {"status": _opend_payload(status_result), "message": status_result.message},
+        {
+            "status": _opend_payload(status_result),
+            "message": status_result.message,
+            "portfolio_sync": portfolio_sync_status(session),
+        },
     )
 
 

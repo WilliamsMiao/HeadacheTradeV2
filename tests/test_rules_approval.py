@@ -58,3 +58,20 @@ def test_complete_rules_approve_sim_trade(session, monkeypatch):
     )
     assert decision.approved
     assert plan.rules_approval_status == "APPROVED_FOR_SIM_TRADE"
+
+
+def test_price_ready_plan_must_be_triggered_before_approval(session, monkeypatch):
+    monkeypatch.setattr("app.services.rules_approval._entry_time_allowed", lambda settings: True)
+    plan = triggered_plan()
+    plan.status = "ACTIVE"
+    session.add(plan)
+    session.commit()
+    decision = rules_approve_trade_plan(
+        session,
+        plan,
+        {"current_price": 101, "spread_pct": 0.001, "volume_ok": True, "short_trend_ok": True, "market_state": "RISK_ON"},
+        PortfolioState("CAPITAL_AVAILABLE", 100000, 0, 0, "ok"),
+        Settings(enable_sim_trading=True),
+    )
+    assert decision.decision == "REJECTED_BY_PRICE"
+    assert "尚未完整触发" in decision.reason
