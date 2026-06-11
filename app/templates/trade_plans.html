@@ -1,47 +1,38 @@
 {% extends "base.html" %}
 {% block content %}
 <header class="page-header compact">
-  <div><h1>交易计划卡</h1><p>只有 S/A 级、结构明确且存在硬止损位的标的才会生成计划。计划不是自动下单指令。</p></div>
-  <div class="header-actions toolbar">
-    <button data-task="run-pipeline" data-loading-text="正在生成">刷新交易计划</button>
-    <button class="secondary" data-task="set-price-alerts" data-loading-text="正在同步">同步到价提醒</button>
-  </div>
+  <div><h1>交易计划执行台</h1><p>这里回答系统准备交易什么、卡在哪一步、为什么没有下单，以及下一步会做什么。</p></div>
+  <div class="header-actions toolbar"><button data-task="run-pipeline" data-loading-text="正在生成">刷新交易计划</button><button class="secondary" data-task="set-price-alerts" data-loading-text="正在同步">同步到价提醒</button></div>
 </header>
-<section class="plan-grid">
-  {% for plan in plans %}
-  <article class="trade-plan" id="plan-{{ plan.id }}">
-    <header class="trade-plan-head">
-      <div><span class="priority priority-{{ plan.priority_level|lower }}">{{ plan.priority_level }}</span><h2>{{ plan.symbol }} · {{ plan.name }}</h2><small>{{ plan.status|label }} · {{ plan.rules_approval_status|label }}</small></div>
-      <div class="plan-status"><span class="state">{{ plan.direction|label }}</span><span class="state">{{ plan.alert_status|label }}</span></div>
-    </header>
-    <div class="plan-context">
-      <span>{{ plan.daily_state|label }}</span>
-      <span>{{ plan.structure_type|label }}</span>
-      <span>{{ plan.entry_mode|label }}</span>
-    </div>
-    <dl class="plan-levels">
-      <div class="primary-level"><dt>关键触发价</dt><dd>{{ plan.breakout_entry_price|price }}</dd></div>
-      <div><dt>回踩区</dt><dd>{{ plan.pullback_entry_low|price }} – {{ plan.pullback_entry_high|price }}</dd></div>
-      <div><dt>低吸区</dt><dd>{{ plan.low_absorb_entry_low|price }} – {{ plan.low_absorb_entry_high|price }}</dd></div>
-      <div class="danger-level"><dt>硬止损</dt><dd>{{ plan.stop_price|price }}</dd></div>
-      <div><dt>第一目标</dt><dd>{{ plan.target_1|price }} · {{ plan.risk_reward_1 }}R</dd></div>
-      <div><dt>第二目标</dt><dd>{{ plan.target_2|price }} · {{ plan.risk_reward_2 }}R</dd></div>
-    </dl>
-    <div class="plan-rules">
-      <div><strong>移动止盈</strong><p>{{ plan.trailing_rule }}</p></div>
-      <div><strong>时间止损</strong><p>{{ plan.time_stop_rule }}</p></div>
-      <div><strong>失效条件</strong><p>{{ plan.invalid_condition }}</p></div>
-    </div>
-    <div class="plan-metrics">
-      <div><span>当前价</span><strong>{{ plan.current_price|price }}</strong></div>
-      <div><span>禁止追价线</span><strong>{{ plan.no_chase_above|price }}</strong></div>
-      <div><span>建议股数</span><strong>{{ plan.suggested_shares or "-" }}</strong></div>
-      <div><span>资金状态</span><strong>{{ plan.capital_status|label }}</strong></div>
-    </div>
-    <footer><p>{{ plan.rules_reject_reason or plan.reason }}</p><small>最后校验 {{ plan.last_validated_at|system_dt }} · 更新时间 {{ plan.updated_at|system_dt }}（香港时间）</small></footer>
-  </article>
-  {% else %}
-  <div class="panel empty-page"><div class="empty"><strong>暂无有效交易计划</strong><span>先运行每日完整扫描。没有明确止损位的结构不会生成计划。</span></div></div>
+{% for group in groups %}
+<section class="plan-group">
+  <div class="section-heading"><div><h2>{{ group["title"] }}</h2><p>{{ group["items"]|length }} 个计划</p></div></div>
+  <div class="plan-grid">
+  {% for item in group["items"] %}
+  {% set plan = item.record %}
+    <article class="trade-plan severity-{{ item.status.severity }}" id="plan-{{ plan.id }}">
+      <header class="trade-plan-head">
+        <div><span class="priority priority-{{ plan.priority_level|lower }}">{{ plan.priority_level }}</span><h3>{{ plan.symbol }} · {{ plan.name }}</h3><small>{{ plan.direction|label }} · {{ plan.structure_type|label }}</small></div>
+        <div class="plan-status"><strong>{{ item.status.display_name }}</strong><small>{{ item.status.description }}</small></div>
+      </header>
+      <dl class="plan-levels compact-levels">
+        <div><dt>当前价</dt><dd>{{ plan.current_price|price }}</dd></div>
+        <div class="primary-level"><dt>关键触发价</dt><dd>{{ plan.breakout_entry_price|price }}</dd></div>
+        <div><dt>禁止追价</dt><dd>{{ plan.no_chase_above|price }}</dd></div>
+        <div class="danger-level"><dt>硬止损</dt><dd>{{ plan.stop_price|price }}</dd></div>
+        <div><dt>第一目标</dt><dd>{{ plan.target_1|price }}</dd></div>
+        <div><dt>第二目标</dt><dd>{{ plan.target_2|price }}</dd></div>
+      </dl>
+      <div class="execution-meta"><span>资金：{{ plan.capital_status|label }}</span><span>审批：{{ plan.rules_approval_status|label }}</span><span>建议股数：{{ plan.suggested_shares or "-" }}</span><span>收益风险：{{ plan.risk_reward_2 }}R</span></div>
+      <div class="next-system-action"><strong>下一步系统动作</strong><p>{{ item.next_action }}</p></div>
+      <details class="score-details"><summary>查看持仓管理规则</summary><div class="plan-rules"><div><strong>移动止盈</strong><p>{{ plan.trailing_rule }}</p></div><div><strong>时间止损</strong><p>{{ plan.time_stop_rule }}</p></div><div><strong>失效条件</strong><p>{{ plan.invalid_condition }}</p></div></div></details>
+      {% if plan.rules_reject_reason or plan.capital_reason %}<div class="blocking-reason"><strong>当前阻塞原因</strong><p>{{ plan.rules_reject_reason or plan.capital_reason }}</p></div>{% endif %}
+      <footer><small>最后校验 {{ plan.last_validated_at|system_dt }} · 更新 {{ plan.updated_at|system_dt }}</small></footer>
+    </article>
   {% endfor %}
+  </div>
 </section>
+{% else %}
+<div class="panel empty-page"><div class="empty"><strong>暂无交易计划</strong><span>只有 S/A 级且能够推导明确止损、目标和执行条件时才会生成计划。</span></div></div>
+{% endfor %}
 {% endblock %}

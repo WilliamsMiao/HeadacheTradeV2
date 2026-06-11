@@ -1,153 +1,122 @@
 {% extends "base.html" %}
 {% block content %}
-<header class="page-header">
+<header class="page-header compact command-header">
   <div>
-    <h1>日线 + 60 分钟结构监控</h1>
-    <p>从全市场候选池中筛选结构事件，聚焦少量重点标的，并生成可执行、可复盘的交易计划。</p>
+    <h1>自动模拟交易作战台</h1>
+    <p>日线 + 60 分钟结构监控：先管理持仓风险，再寻找第一个完整通过实时校验、规则审批和资金闸门的机会。</p>
   </div>
-  <a class="market-tile {{ market.state|css_class if market else 'market-unknown' }}" href="/market">
-    <span>市场风向标 · 仅供仓位参考</span>
-    <strong>{{ market.state|label if market else "尚未计算" }}</strong>
-    <small>{{ market.state|market_reason_desc(market.reason) if market else "运行每日扫描后生成市场环境说明" }}</small>
-  </a>
+  <div class="header-actions toolbar">
+    <button data-task="run-60m" data-loading-text="正在刷新">刷新 60 分钟监控</button>
+    <details class="action-menu">
+      <summary>系统任务</summary>
+      <div class="action-menu-content">
+        <button data-task="run-daily" data-loading-text="正在扫描">运行每日完整扫描</button>
+        <button data-task="screen-market" data-loading-text="正在选股">仅更新候选池</button>
+        <button data-task="run-pipeline" data-loading-text="正在生成">重新生成评级与计划</button>
+      </div>
+    </details>
+  </div>
 </header>
 
-<section class="summary-grid">
-  <a class="summary-card" href="/candidates">
-    <span>候选标的</span>
-    <strong>{{ summary.candidate_count }}</strong>
-    <small>四类池合并去重，上限 300 支</small>
-  </a>
-  <a class="summary-card" href="/battle-pool">
-    <span>重点作战池</span>
-    <strong>{{ summary.battle_count }}</strong>
-    <small>按结构质量分为 S / A / B / C</small>
-  </a>
-  <a class="summary-card" href="/trade-plans">
-    <span>有效交易计划</span>
-    <strong>{{ summary.plan_count }}</strong>
-    <small>仅 S/A 级且止损清晰时生成</small>
-  </a>
-  <article class="summary-card">
-    <span>模拟持仓</span>
-    <strong>{{ summary.open_positions }}</strong>
-    <small>计划到价后仍需人工复核</small>
+<section class="command-status" aria-label="系统状态">
+  <article class="status-tile severity-{{ command.system.sim_severity }}">
+    <span>模拟交易循环</span><strong>{{ command.system.sim_mode }}</strong><small>每 30 秒检查订单、持仓和新机会</small>
   </article>
+  <article class="status-tile severity-success">
+    <span>真实交易</span><strong>{{ command.system.real_trading }}</strong><small>代码层强制禁止真实盘</small>
+  </article>
+  <article class="status-tile">
+    <span>今日新开仓</span><strong>{{ command.system.new_trades }} / {{ command.system.max_new_trades }}</strong><small>达到上限后停止新开仓</small>
+  </article>
+  <article class="status-tile">
+    <span>当前持仓</span><strong>{{ command.system.positions }} / {{ command.system.max_positions }}</strong><small>已有持仓优先管理</small>
+  </article>
+  <article class="status-tile severity-{{ 'success' if command.system.allows_entry else 'danger' }}">
+    <span>允许新开仓</span><strong>{{ "是" if command.system.allows_entry else "否" }}</strong><small>{{ command.system.stop_reason or "等待完整规则审批机会" }}</small>
+  </article>
+  <a class="status-tile {{ market.state|css_class if market else '' }}" href="/market">
+    <span>市场风向标</span><strong>{{ market.state|label if market else "未计算" }}</strong><small>风险关闭会阻止新订单</small>
+  </a>
 </section>
 
-<section class="panel">
-  <div class="task-bar">
-    <div class="task-bar-copy">
-      <h2>系统任务</h2>
-      <small>每日完整扫描用于重建候选池；盘中扫描只刷新核心 K 线、结构、评级与计划。</small>
-      <small>自动运行：美东交易日 08:45 完整扫描；每根 60 分钟 K 线结束约 5 分钟后刷新。</small>
-    </div>
-    <div class="task-bar-actions" aria-label="系统任务">
-      <button data-task="run-daily" data-loading-text="正在扫描">运行每日完整扫描</button>
-      <button class="secondary" data-task="run-60m" data-loading-text="正在刷新">刷新 60 分钟监控</button>
-      <details class="action-menu">
-        <summary>更多任务</summary>
-        <div class="action-menu-content">
-          <button data-task="screen-market" data-loading-text="正在选股">仅更新候选池</button>
-          <button data-task="update-market-data" data-loading-text="正在更新">仅更新核心行情</button>
-          <button data-task="compute-indicators" data-loading-text="正在计算">重新计算指标</button>
-          <button data-task="run-pipeline" data-loading-text="正在生成">重新生成评级与计划</button>
-        </div>
-      </details>
-    </div>
-  </div>
-  <div class="task-progress" data-task-progress hidden aria-live="polite">
-    <div class="task-progress-copy">
-      <strong data-task-progress-title>后台任务</strong>
-      <span data-task-progress-message>等待开始</span>
-    </div>
-    <div class="task-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-      <span data-task-progress-bar></span>
-    </div>
-    <span data-task-progress-value>0%</span>
-  </div>
-</section>
+<div class="task-progress" data-task-progress hidden aria-live="polite">
+  <div class="task-progress-copy"><strong data-task-progress-title>后台任务</strong><span data-task-progress-message>等待开始</span></div>
+  <div class="task-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span data-task-progress-bar></span></div>
+  <span data-task-progress-value>0%</span>
+</div>
 
-<section class="grid two dashboard-focus-grid">
-  <div class="panel">
-    <div class="panel-head">
-      <div class="panel-head-copy"><h2>重点作战标的</h2><span>每天优先认真查看最靠前的 1 至 3 支</span></div>
-      <a class="text-link" href="/battle-pool">查看全部</a>
-    </div>
-    <div class="compact-list">
-      {% for item in battle_items %}
-      <a class="compact-row" href="/symbols/{{ item.symbol }}">
-        <span class="priority priority-{{ item.priority_level|lower }}">{{ item.priority_level }}</span>
-        <span class="compact-row-main">
-          <strong>{{ item.symbol }} · {{ item.direction|label }}</strong>
-          <small>{{ item.daily_state|label }} · {{ item.structure_type|label }}</small>
-        </span>
-        <span class="compact-row-value">{{ "%.1f"|format(item.score) }}</span>
-      </a>
-      {% else %}
-      <div class="empty">
-        <strong>尚无重点作战标的</strong>
-        <span>运行每日完整扫描后，系统会从结构事件中进行评级。</span>
-      </div>
-      {% endfor %}
-    </div>
-  </div>
-
-  <div class="panel">
-    <div class="panel-head">
-      <div class="panel-head-copy"><h2>交易计划</h2><span>计划不是买卖指令，到价后仍需人工复核</span></div>
-      <a class="text-link" href="/trade-plans">查看全部</a>
-    </div>
-    <div class="compact-list">
-      {% for plan in plans %}
-      <a class="compact-row" href="/trade-plans#plan-{{ plan.id }}">
-        <span class="priority priority-{{ plan.priority_level|lower }}">{{ plan.priority_level }}</span>
-        <span class="compact-row-main">
-          <strong>{{ plan.symbol }} · {{ plan.direction|label }}</strong>
-          <small>触发 {{ plan.breakout_entry_price|price }} · 止损 {{ plan.stop_price|price }}</small>
-        </span>
-        <span class="compact-row-value">{{ plan.risk_reward_2 }}R</span>
-      </a>
-      {% else %}
-      <div class="empty">
-        <strong>尚无有效交易计划</strong>
-        <span>只有 S/A 级结构且存在明确止损位时才会生成计划。</span>
-      </div>
-      {% endfor %}
-    </div>
+<section class="command-section">
+  <div class="section-heading"><div><h2>当前模拟持仓</h2><p>持仓管理优先于发现新机会。</p></div><a class="text-link" href="/positions">查看全部</a></div>
+  <div class="position-command-grid">
+    {% for item in command.positions_vm %}
+    {% set position = item.record %}
+    <a class="position-command" href="/positions#position-{{ position.id }}">
+      <div><strong>{{ position.symbol }}</strong><span class="state">{{ position.status|label }}</span></div>
+      <dl><div><dt>入场</dt><dd>{{ position.entry_price|price }}</dd></div><div><dt>当前 R</dt><dd>{{ "%.2f"|format(position.current_r) }}R</dd></div><div><dt>止损</dt><dd>{{ position.stop_price|price }}</dd></div><div><dt>目标 1</dt><dd>{{ position.target_1|price }}</dd></div></dl>
+      <p><strong>下一步：</strong>{{ item.next_action }}</p>
+    </a>
+    {% else %}
+    <div class="command-empty"><strong>当前无模拟持仓</strong><p>系统将从 S/A 级计划中寻找第一个完整通过规则审批的机会。</p></div>
+    {% endfor %}
   </div>
 </section>
 
-<section class="panel">
-  <div class="panel-head">
-    <div class="panel-head-copy"><h2>候选池前列</h2><span>评分仅用于候选排序和解释，不直接触发交易</span></div>
-    <a class="text-link" href="/candidates">查看 300 支候选池</a>
+<section class="command-section">
+  <div class="section-heading"><div><h2>今日可执行机会</h2><p>只展示真正进入执行阶段的 S/A 级计划。</p></div><a class="text-link" href="/trade-plans">查看全部计划</a></div>
+  <div class="opportunity-grid">
+    {% for item in command.executable %}
+    {% set plan = item.record %}
+    <a class="opportunity-card severity-{{ item.status.severity }}" href="/trade-plans#plan-{{ plan.id }}">
+      <header><span class="priority priority-{{ plan.priority_level|lower }}">{{ plan.priority_level }}</span><div><strong>{{ plan.symbol }} · {{ plan.direction|label }}</strong><small>{{ plan.structure_type|label }}</small></div><span class="status-text">{{ item.status.display_name }}</span></header>
+      <dl><div><dt>当前价</dt><dd>{{ plan.current_price|price }}</dd></div><div><dt>入场价</dt><dd>{{ plan.breakout_entry_price|price }}</dd></div><div><dt>禁止追价</dt><dd>{{ plan.no_chase_above|price }}</dd></div><div><dt>止损</dt><dd>{{ plan.stop_price|price }}</dd></div><div><dt>目标 1</dt><dd>{{ plan.target_1|price }}</dd></div><div><dt>资金</dt><dd>{{ plan.capital_status|label }}</dd></div></dl>
+      <p><strong>下一步：</strong>{{ item.next_action }}</p>
+    </a>
+    {% else %}
+    <div class="command-empty"><strong>暂无可执行机会</strong><p>候选股和作战评级不等于可以交易；系统正在等待有效结构、价格和资金条件同时满足。</p></div>
+    {% endfor %}
   </div>
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th>股票</th><th>候选池</th><th>技术标签</th><th>排序分</th><th>入池原因</th></tr></thead>
-      <tbody>
-        {% for item in candidates %}
-        <tr>
-          <td class="symbol-cell"><a href="/symbols/{{ item.symbol }}">{{ item.symbol }}</a><small>{{ item.name }}</small></td>
-          <td>
-            {% for pool in item.pool_types_json|json_list %}
-            <span class="state">{{ pool|label }}</span>
-            {% endfor %}
-          </td>
-          <td class="tag-cell">
-            {% for tag in item.tags_json|json_list %}
-            <span class="tag">{{ tag|label }}</span>
-            {% endfor %}
-          </td>
-          <td><strong>{{ "%.1f"|format(item.rank_score) }}</strong></td>
-          <td><p class="reason-short">{{ item.selected_reason }}</p></td>
-        </tr>
-        {% else %}
-        <tr><td colspan="5"><div class="empty"><strong>候选池为空</strong><span>确认 OpenD 已连接后运行每日完整扫描。</span></div></td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+</section>
+
+<section class="command-section">
+  <div class="section-heading"><div><h2>为什么没有交易</h2><p>被拒绝、等待或失效的机会必须给出明确原因。</p></div></div>
+  <div class="blocked-list">
+    {% for item in command.blocked %}
+    {% set plan = item.record %}
+    <a href="/trade-plans#plan-{{ plan.id }}">
+      <span class="priority priority-{{ plan.priority_level|lower }}">{{ plan.priority_level }}</span>
+      <span><strong>{{ plan.symbol }} · {{ item.status.display_name }}</strong><small>{{ item.reason }}</small></span>
+      <span class="next-action">{{ item.next_action }}</span>
+    </a>
+    {% else %}
+    <div class="command-empty"><strong>暂无被阻塞机会</strong><p>规则拒绝和资金错过会显示在这里。</p></div>
+    {% endfor %}
   </div>
+</section>
+
+<section class="command-section">
+  <div class="section-heading"><div><h2>候选到成交漏斗</h2><p>每一层都有不同含义，候选池排名不是交易优先级。</p></div></div>
+  <div class="trade-funnel">
+    {% for label, count in command.funnel.items() %}
+    <a href="{{ '/candidates' if label == '候选池' else '/structures' if label == '60m 结构' else '/battle-pool' if label in ['作战池', 'S/A 级'] else '/trade-plans' if label in ['交易计划', '实时校验', '规则通过'] else '/sim-orders' if label == '模拟订单' else '/positions' }}">
+      <strong>{{ count }}</strong><span>{{ label }}</span>
+    </a>
+    {% endfor %}
+  </div>
+  <div class="flow-explanation">
+    <p><strong>候选池排名</strong>代表观察价值，主要来自流动性、活跃度和技术标签。</p>
+    <p><strong>S/A 作战等级</strong>要求已经出现有效 60 分钟结构，并通过日线、时效和止损距离评分。</p>
+    <p><strong>模拟下单</strong>只发生在计划通过实时价格、规则审批和资金闸门之后。</p>
+  </div>
+</section>
+
+<section class="command-section">
+  <div class="section-heading"><div><h2>最近系统动作</h2><p>自动决策链按时间倒序记录。</p></div><a class="text-link" href="/journal">打开交易日志</a></div>
+  <ol class="action-timeline">
+    {% for log in command.timeline %}
+    <li><time>{{ log.created_at|system_dt }}</time><span class="timeline-dot"></span><div><strong>{{ log.action|label }}{% if log.symbol %} · {{ log.symbol }}{% endif %}</strong><p>{{ log.reason or "系统已完成该步骤" }}</p></div></li>
+    {% else %}
+    <li class="timeline-empty">暂无自动交易动作，运行扫描后会逐步记录结构、计划、审批和订单。</li>
+    {% endfor %}
+  </ol>
 </section>
 {% endblock %}

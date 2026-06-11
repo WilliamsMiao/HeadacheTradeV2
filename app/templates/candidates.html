@@ -1,42 +1,39 @@
 {% extends "base.html" %}
 {% block content %}
 <header class="page-header compact">
-  <div>
-    <h1>选股池</h1>
-    <p>Futu 条件选股负责全市场粗筛，本地指标负责解释、排序和后续结构确认。选股结果不是交易信号。</p>
-  </div>
+  <div><h1>候选观察池</h1><p>候选分代表值得观察，不代表交易优先级；只有出现有效 60 分钟结构后，才可能进入作战池。</p></div>
   <div class="header-actions"><button data-task="screen-market" data-loading-text="正在扫描">重新扫描市场</button></div>
 </header>
-
+<div class="flow-explanation page-explanation">
+  <p><strong>观察分高</strong>表示流动性、活跃度和技术标签较好。</p>
+  <p><strong>未进入作战池</strong>通常是因为没有结构、仍在等待确认、止损过远或日线不支持。</p>
+  <p><strong>下一步</strong>由系统随 60 分钟监控自动推进，不会因排名高直接下单。</p>
+</div>
 <nav class="filter-tabs" aria-label="候选池筛选">
   <a href="/candidates" {% if not selected_pool %}aria-current="page"{% endif %}>全部</a>
-  {% for pool, count in pool_counts.items() %}
-  <a href="/candidates?pool={{ pool }}" {% if selected_pool == pool %}aria-current="page"{% endif %}>{{ pool|label }} <span>{{ count }}</span></a>
-  {% endfor %}
+  {% for pool, count in pool_counts.items() %}<a href="/candidates?pool={{ pool }}" {% if selected_pool == pool %}aria-current="page"{% endif %}>{{ pool|label }} <span>{{ count }}</span></a>{% endfor %}
 </nav>
-
 <section class="panel">
-  <div class="panel-head"><div class="panel-head-copy"><h2>{{ selected_pool|label if selected_pool else "全部候选" }}</h2><span>合并重复股票并保留全部命中标签</span></div><small>{{ items|length }} 支</small></div>
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th>股票</th><th>候选池</th><th>技术标签</th><th>流动性</th><th>热度</th><th>技术分</th><th>总排序</th><th>入池原因</th></tr></thead>
-      <tbody>
-        {% for item in items %}
-        <tr>
-          <td class="symbol-cell"><a href="/symbols/{{ item.symbol }}">{{ item.symbol }}</a><small>{{ item.name }}</small></td>
-          <td>{% for pool in item.pool_types_json|json_list %}<span class="state">{{ pool|label }}</span>{% endfor %}</td>
-          <td class="tag-cell">{% for tag in item.tags_json|json_list %}<span class="tag">{{ tag|label }}</span>{% endfor %}</td>
-          <td>{{ "%.1f"|format(item.liquidity_score) }}</td>
-          <td>{{ "%.1f"|format(item.heat_score) }}</td>
-          <td>{{ "%.1f"|format(item.technical_score) }}</td>
-          <td><strong>{{ "%.1f"|format(item.rank_score) }}</strong></td>
-          <td><p class="reason-short" title="{{ item.selected_reason }}">{{ item.selected_reason }}</p></td>
-        </tr>
-        {% else %}
-        <tr><td colspan="8"><div class="empty"><strong>该候选池暂无标的</strong><span>重新扫描市场，或切换到其他候选池查看。</span></div></td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+  <div class="panel-head"><div class="panel-head-copy"><h2>{{ selected_pool|label if selected_pool else "全部候选" }}</h2><span>固定展示漏斗状态、未进入下一层原因和下一步</span></div><small>{{ items|length }} 支</small></div>
+  <div class="table-wrap"><table class="decision-table">
+    <thead><tr><th>排名</th><th>股票</th><th>观察分</th><th>候选类型 / 标签</th><th>分项</th><th>漏斗状态</th><th>未进入下一层原因</th><th>下一步</th></tr></thead>
+    <tbody>
+    {% for item in items %}
+    {% set record = item.record %}
+      <tr>
+        <td class="rank-cell">{{ item.rank }}</td>
+        <td class="symbol-cell"><a href="/symbols/{{ record.symbol }}">{{ record.symbol }}</a><small>{{ record.name }}</small></td>
+        <td><strong>{{ "%.1f"|format(record.rank_score) }}</strong></td>
+        <td class="tag-cell">{% for pool in record.pool_types_json|json_list %}<span class="state">{{ pool|label }}</span>{% endfor %}<br>{% for tag in record.tags_json|json_list %}<span class="tag">{{ tag|label }}</span>{% endfor %}</td>
+        <td><small>流动性 {{ "%.1f"|format(record.liquidity_score) }}<br>热度 {{ "%.1f"|format(record.heat_score) }}<br>技术 {{ "%.1f"|format(record.technical_score) }}</small></td>
+        <td><span class="state status-{{ item.funnel_status|lower }}">{{ item.funnel_status|label }}</span></td>
+        <td><p class="reason-short" title="{{ item.reason }}">{{ item.reason }}</p></td>
+        <td class="next-action-cell">{{ item.next_action }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="8"><div class="empty"><strong>该候选池暂无标的</strong><span>重新扫描市场，或切换其他候选类型。</span></div></td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
 </section>
 {% endblock %}

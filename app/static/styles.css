@@ -1081,6 +1081,321 @@ td a + small {
   border-top: 1px solid var(--color-border);
 }
 
+.command-header,
+.section-heading,
+.position-management header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.command-status {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+}
+
+.status-tile {
+  display: grid;
+  min-height: 112px;
+  align-content: start;
+  gap: var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface);
+  padding: var(--space-4);
+  box-shadow: var(--shadow-panel);
+}
+
+.status-tile span,
+.status-tile small,
+.section-heading p,
+.position-command p,
+.opportunity-card p {
+  color: var(--color-text-muted);
+}
+
+.status-tile strong {
+  font-size: 18px;
+}
+
+.severity-success {
+  border-color: var(--color-success);
+}
+
+.severity-warning {
+  border-color: var(--color-warning);
+}
+
+.severity-danger {
+  border-color: var(--color-danger);
+}
+
+.command-section,
+.plan-group {
+  display: grid;
+  gap: var(--space-4);
+  margin-bottom: var(--space-8);
+}
+
+.section-heading h2 {
+  font-size: 18px;
+}
+
+.text-link {
+  color: var(--color-primary);
+  font-weight: 650;
+}
+
+.position-command-grid,
+.position-management-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.position-command,
+.position-management,
+.opportunity-card {
+  display: grid;
+  gap: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface);
+  padding: var(--space-5);
+  box-shadow: var(--shadow-panel);
+}
+
+.position-command > div:first-child,
+.opportunity-card header,
+.position-management header > div {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.position-command dl,
+.opportunity-card dl,
+.position-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.position-command dl div,
+.opportunity-card dl div,
+.position-metrics div {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.position-command dt,
+.opportunity-card dt,
+.position-metrics dt {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.position-command dd,
+.opportunity-card dd,
+.position-metrics dd {
+  font-variant-numeric: tabular-nums;
+  font-weight: 720;
+}
+
+.command-empty {
+  grid-column: 1 / -1;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface-subtle);
+  padding: var(--space-6);
+}
+
+.opportunity-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.opportunity-card header {
+  align-items: flex-start;
+}
+
+.opportunity-card header div {
+  display: grid;
+  flex: 1;
+}
+
+.status-text {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.blocked-list {
+  display: grid;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface);
+}
+
+.blocked-list > a {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) minmax(180px, 0.5fr);
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.blocked-list > a:last-child {
+  border-bottom: 0;
+}
+
+.blocked-list small,
+.next-action {
+  display: block;
+  color: var(--color-text-muted);
+}
+
+.trade-funnel {
+  display: grid;
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface);
+  overflow: hidden;
+}
+
+.trade-funnel a {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-1);
+  padding: var(--space-4) var(--space-2);
+  border-right: 1px solid var(--color-border);
+}
+
+.trade-funnel a:last-child {
+  border-right: 0;
+}
+
+.trade-funnel strong {
+  font-size: 22px;
+}
+
+.flow-explanation {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
+  color: var(--color-text-secondary);
+}
+
+.flow-explanation p {
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--color-border-strong);
+}
+
+.action-timeline {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.action-timeline li {
+  display: grid;
+  grid-template-columns: 144px 12px minmax(0, 1fr);
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+}
+
+.action-timeline time {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.timeline-dot {
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--color-primary);
+}
+
+.action-timeline p {
+  color: var(--color-text-secondary);
+}
+
+.page-explanation,
+.next-system-action,
+.blocking-reason {
+  padding: var(--space-4);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-subtle);
+}
+
+.blocking-reason {
+  border-left: 3px solid var(--color-danger);
+  background: var(--color-danger-soft);
+}
+
+.next-system-action {
+  border-left: 3px solid var(--color-primary);
+}
+
+.execution-meta,
+.position-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+.position-management-grid {
+  align-items: start;
+}
+
+.position-metrics {
+  padding: var(--space-4);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-subtle);
+}
+
+.position-metrics .danger-level {
+  color: var(--color-danger);
+}
+
+.journal-panel {
+  padding-bottom: var(--space-4);
+}
+
+.journal-timeline {
+  padding: 0 var(--space-5);
+}
+
+.journal-timeline li + li {
+  border-top: 1px solid var(--color-border);
+}
+
+.journal-timeline li > div {
+  min-width: 0;
+}
+
+.journal-timeline .state {
+  margin-left: var(--space-2);
+}
+
+.battle-row-expanded {
+  grid-column: 2 / -1;
+}
+
+.score-details {
+  color: var(--color-text-secondary);
+}
+
 .empty-page {
   grid-column: 1 / -1;
 }
@@ -2156,5 +2471,59 @@ select:focus-visible {
 @media (max-width: 1100px) {
   .plan-grid {
     grid-template-columns: 1fr;
+  }
+
+  .command-status {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .opportunity-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .trade-funnel {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .trade-funnel a {
+    border-bottom: 1px solid var(--color-border);
+  }
+}
+
+@media (max-width: 760px) {
+  .command-header,
+  .section-heading,
+  .position-management header {
+    flex-direction: column;
+  }
+
+  .command-status,
+  .position-command-grid,
+  .position-management-grid,
+  .opportunity-grid,
+  .flow-explanation {
+    grid-template-columns: 1fr;
+  }
+
+  .blocked-list > a {
+    grid-template-columns: 40px minmax(0, 1fr);
+  }
+
+  .blocked-list .next-action {
+    grid-column: 2;
+  }
+
+  .trade-funnel {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .position-command dl,
+  .opportunity-card dl,
+  .position-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .action-timeline li {
+    grid-template-columns: 96px 8px minmax(0, 1fr);
   }
 }
