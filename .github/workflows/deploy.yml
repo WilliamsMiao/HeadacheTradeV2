@@ -1,6 +1,7 @@
 name: Deploy
 
 on:
+  pull_request:
   push:
     branches: ["main"]
   workflow_dispatch:
@@ -14,11 +15,17 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: astral-sh/setup-uv@v5
       - name: Install dependencies
         run: uv sync --frozen --extra test
       - name: Run tests
-        run: uv run pytest
+        run: uv run pytest -q
+      - name: Check frontend JavaScript
+        run: node --check app/static/app.js
+      - name: Check patch formatting
+        run: git diff --check HEAD^ HEAD
 
   deploy:
     needs: test
@@ -60,3 +67,7 @@ jobs:
             -czf - . \
           | ssh -i ~/.ssh/deploy_key -p "$PORT" "$SERVER_USER@$SERVER_HOST" \
               "RELEASE_ID=$RELEASE_ID sudo -E bash /tmp/headachetrade_remote_release.sh"
+      - name: Verify public health endpoint
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+        run: curl --fail --retry 10 --retry-delay 2 --retry-connrefused "http://${SERVER_HOST}/health"

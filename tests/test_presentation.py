@@ -6,6 +6,8 @@ def test_known_labels_are_translated_to_chinese():
     assert label_for("ENTRY_CANDIDATE") == "入场候选"
     assert label_for("WAIT_15M_TRIGGER") == "等待 15 分钟触发"
     assert label_for("BOTTOM_STRUCTURE") == "底结构"
+    assert label_for("TREND_BREAK") == "趋势破坏"
+    assert label_for("TRAIL") == "滑动止盈"
     assert label_for("SCRIPT_A_BOTTOM_TREND_RESUME") == "剧本 A：底结构后的趋势恢复"
     assert label_for("60m") == "60 分钟"
     assert label_for("CANCELLED_BY_TRIGGER") == "因触发失败取消"
