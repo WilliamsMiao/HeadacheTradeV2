@@ -64,6 +64,33 @@
 </section>
 
 <section class="panel">
+  <div class="panel-head"><h2>建议与纠错历史</h2><span>保留取消和过期原因，便于复盘</span></div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>时间</th><th>类型</th><th>状态</th><th>结构 / 触发</th><th>原因</th></tr></thead>
+      <tbody>
+        {% for signal in signals %}
+        <tr>
+          <td>{{ signal.created_at|dt }}</td>
+          <td>{{ signal.signal_type|label }}</td>
+          <td><span class="state">{{ signal.status|label }}</span></td>
+          <td>
+            {% if signal.source_structure_id %}
+            <strong>60 分钟结构 #{{ signal.source_structure_id }}</strong>
+            <small>{{ signal.trigger_timeframe|label }} {{ signal.trigger_ts|dt }} · {{ signal.trigger_level|price }}</small>
+            {% else %}-{% endif %}
+          </td>
+          <td>{{ (signal.cancel_reason or signal.reason)|reason }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5">暂无交易建议或纠错记录</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel">
   <div class="panel-head"><h2>日线指标快照</h2><span>按时间顺序计算，无未来函数</span></div>
   <div class="table-wrap">
     <table>

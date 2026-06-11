@@ -157,7 +157,17 @@ class TradeSignal(Base, TimestampMixin):
     target_position_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     shares: Mapped[int | None] = mapped_column(Integer, nullable=True)
     risk_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
+    risk_per_share: Mapped[float | None] = mapped_column(Float, nullable=True)
+    allowed_loss: Mapped[float | None] = mapped_column(Float, nullable=True)
+    position_value: Mapped[float | None] = mapped_column(Float, nullable=True)
     risk_r: Mapped[float | None] = mapped_column(Float, nullable=True)
+    source_structure_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    trigger_timeframe: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    trigger_ts: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    trigger_level: Mapped[float | None] = mapped_column(Float, nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    cancel_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    script_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
     reason: Mapped[str] = mapped_column(Text)
     score_display: Mapped[float | None] = mapped_column(Float, nullable=True)
 
@@ -195,6 +205,34 @@ class ReviewStat(Base, TimestampMixin):
     subject_id: Mapped[int] = mapped_column(Integer, index=True)
     metric: Mapped[str] = mapped_column(String(64), index=True)
     value: Mapped[float] = mapped_column(Float)
+
+
+class BacktestTrade(Base, TimestampMixin):
+    __tablename__ = "backtest_trades"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    run_id: Mapped[str] = mapped_column(String(64), index=True)
+    symbol: Mapped[str] = mapped_column(String(32), index=True)
+    script: Mapped[str] = mapped_column(String(48), default="")
+    source_structure_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    structure_type: Mapped[str] = mapped_column(String(48), default="")
+    structure_ts: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    trigger_timeframe: Mapped[str] = mapped_column(String(16), default="")
+    trigger_reason: Mapped[str] = mapped_column(Text, default="")
+    entry_ts: Mapped[datetime] = mapped_column(DateTime, index=True)
+    entry_price: Mapped[float] = mapped_column(Float)
+    stop_price: Mapped[float] = mapped_column(Float)
+    shares: Mapped[int] = mapped_column(Integer)
+    risk_amount: Mapped[float] = mapped_column(Float)
+    exit_ts: Mapped[datetime] = mapped_column(DateTime, index=True)
+    exit_price: Mapped[float] = mapped_column(Float)
+    exit_reason: Mapped[str] = mapped_column(Text)
+    max_r: Mapped[float] = mapped_column(Float)
+    min_r: Mapped[float] = mapped_column(Float)
+    final_r: Mapped[float] = mapped_column(Float)
+    holding_bars: Mapped[int] = mapped_column(Integer)
+    market_state_at_entry: Mapped[str] = mapped_column(String(32), default="")
+    stock_trend_at_entry: Mapped[str] = mapped_column(String(32), default="")
 
 
 class SystemConfig(Base, TimestampMixin):
