@@ -38,7 +38,12 @@ def run_sync_watchlist(session: Session, settings: Settings, use_mock: bool = Fa
             close()
 
 
-def run_update_market_data(session: Session, settings: Settings, use_mock: bool = False) -> dict[str, object]:
+def run_update_market_data(
+    session: Session,
+    settings: Settings,
+    use_mock: bool = False,
+    on_progress=None,
+) -> dict[str, object]:
     provider = get_provider(settings, use_mock)
     try:
         symbols = list(dict.fromkeys([*settings.market_symbols, *active_symbols(session)]))
@@ -50,6 +55,7 @@ def run_update_market_data(session: Session, settings: Settings, use_mock: bool 
             provider,
             symbols,
             include_display_timeframes=settings.futu_include_5m,
+            on_progress=on_progress,
         )
         failures = {
             key: value

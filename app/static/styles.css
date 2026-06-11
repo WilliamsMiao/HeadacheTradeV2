@@ -607,6 +607,48 @@ small,
   gap: var(--space-2);
 }
 
+.task-progress {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(160px, 320px) 48px;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-primary-soft);
+}
+
+.task-progress-copy {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.task-progress-copy span,
+.task-progress-value {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.task-progress-track {
+  height: 8px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+}
+
+.task-progress-track span {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-primary);
+  transition: width 180ms ease;
+}
+
+.task-progress-value {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
 .action-menu {
   position: relative;
 }
@@ -1585,6 +1627,14 @@ select:focus-visible {
 
   .task-bar-actions > button {
     width: 100%;
+  }
+
+  .task-progress {
+    grid-template-columns: 1fr 48px;
+  }
+
+  .task-progress-copy {
+    grid-column: 1 / -1;
   }
 
   .action-menu {

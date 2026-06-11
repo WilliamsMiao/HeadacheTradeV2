@@ -44,6 +44,7 @@ from app.services.pipeline import symbol_data_status
 from app.services.market import market_diagnostics
 from app.services import opend_admin
 from app.services.risk import get_or_create_risk_config
+from app.services.task_runner import get_active_task, get_task, start_task, task_payload
 from app.services.workbench import (
     debug_payload,
     events_payload,
@@ -350,21 +351,52 @@ def api_opend_verify_code(payload: OpenDCodePayload):
 @app.post("/tasks/{task_name}")
 def run_task(task_name: str, mock: bool = False, session: Session = Depends(get_session)):
     settings = get_settings()
+    if task_name in {"update-market-data", "run-backtest"}:
+        try:
+            state = start_task(
+                task_name,
+                lambda progress: _run_background_task(task_name, settings, mock, progress),
+            )
+        except RuntimeError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return JSONResponse(task_payload(state), status_code=202)
     if task_name == "sync-watchlist":
         payload = {"synced": run_sync_watchlist(session, settings, use_mock=mock)}
-    elif task_name == "update-market-data":
-        payload = run_update_market_data(session, settings, use_mock=mock)
     elif task_name == "compute-indicators":
         payload = {"computed": run_compute_indicators(session, settings)}
     elif task_name == "run-pipeline":
         payload = run_pipeline(session, settings)
-    elif task_name == "run-backtest":
-        payload = run_backtest(session, settings)
     elif task_name == "mock-full-refresh":
         payload = run_full_refresh(session, settings, use_mock=True)
     else:
         raise HTTPException(status_code=404, detail="unknown task")
     return payload
+
+
+@app.get("/api/tasks/active")
+def active_task_status():
+    state = get_active_task()
+    return task_payload(state) if state else {"status": "IDLE"}
+
+
+@app.get("/api/tasks/{task_id}")
+def task_status(task_id: str):
+    state = get_task(task_id)
+    if state is None:
+        raise HTTPException(status_code=404, detail="任务不存在或服务已重启")
+    return task_payload(state)
+
+
+def _run_background_task(task_name: str, settings, mock: bool, progress):
+    with SessionLocal() as session:
+        if task_name == "update-market-data":
+            return run_update_market_data(session, settings, use_mock=mock, on_progress=progress)
+        if task_name == "run-backtest":
+            progress(0, 1, "正在执行时间步进复盘")
+            result = run_backtest(session, settings)
+            progress(1, 1, "复盘数据已生成")
+            return result
+    raise ValueError("不支持的后台任务")
 
 
 @app.get("/health")

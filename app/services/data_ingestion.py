@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from datetime import datetime
 
 from sqlalchemy import select
@@ -72,21 +73,29 @@ def update_market_data(
     start: datetime | None = None,
     end: datetime | None = None,
     include_display_timeframes: bool = False,
+    on_progress: Callable[[int, int, str], None] | None = None,
 ) -> dict[str, str]:
     results: dict[str, str] = {}
     timeframes = (*CORE_TIMEFRAMES, *DISPLAY_TIMEFRAMES) if include_display_timeframes else CORE_TIMEFRAMES
+    total = len(symbols) * len(timeframes)
+    completed = 0
     for symbol in symbols:
         for timeframe in timeframes:
+            key = f"{symbol}:{timeframe}"
             try:
                 bars = provider.get_klines(symbol, timeframe, start, end)
                 if not bars:
-                    results[f"{symbol}:{timeframe}"] = "no bars returned from data source"
+                    results[key] = "no bars returned from data source"
                     continue
                 count, anomaly_count = upsert_bars(session, bars)
                 if anomaly_count:
-                    results[f"{symbol}:{timeframe}"] = f"updated {count} bars; {anomaly_count} anomalous bars isolated"
+                    results[key] = f"updated {count} bars; {anomaly_count} anomalous bars isolated"
                 else:
-                    results[f"{symbol}:{timeframe}"] = f"updated {count} bars; data quality passed"
+                    results[key] = f"updated {count} bars; data quality passed"
             except Exception as exc:
-                results[f"{symbol}:{timeframe}"] = f"data source failed: {exc}"
+                results[key] = f"data source failed: {exc}"
+            finally:
+                completed += 1
+                if on_progress:
+                    on_progress(completed, total, f"正在更新 {symbol} · {timeframe}")
     return results
