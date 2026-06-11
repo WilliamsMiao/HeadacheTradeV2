@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.domain import DAILY, ENTRY_TRENDS, STRUCTURE_TIMEFRAME, TRADEABLE_MARKETS
 from app.models import Indicator, KLine, Position, StateTransitionLog, StructureEvent, TradeSignal, TradingState
+from app.services.corrections import entry_trigger_failure_reason, reconcile_pending_entry
 from app.services.entry_trigger import EntryTriggerEvaluation, evaluate_15m_trend_resume
 from app.services.risk import (
     calculate_position_size,
@@ -12,6 +13,7 @@ from app.services.risk import (
     get_or_create_risk_config,
     portfolio_allows_new_position,
 )
+from app.strategy_config import CORRECTION_CONFIG
 
 
 def get_or_create_trading_state(session: Session, symbol: str) -> TradingState:
@@ -75,9 +77,30 @@ def _signal_exists(session: Session, symbol: str, signal_type: str) -> bool:
     )
 
 
-def advance_state_machine(session: Session, symbol: str, market_state: str, stock_trend: str) -> TradingState:
+def advance_state_machine(
+    session: Session,
+    symbol: str,
+    market_state: str,
+    stock_trend: str,
+    *,
+    as_of_date: date | None = None,
+) -> TradingState:
     record = get_or_create_trading_state(session, symbol)
-    today = date.today()
+    today = as_of_date or date.today()
+    correction = reconcile_pending_entry(session, symbol, market_state)
+    if correction:
+        if correction.start_cooldown:
+            config = get_or_create_risk_config(session)
+            record.cooldown_until = today + timedelta(days=config.cooldown_days)
+        _transition(
+            session,
+            record,
+            correction.target_state,
+            correction.reason,
+            _correction_next_wait(correction.status),
+        )
+        session.commit()
+        return record
     if record.cooldown_until and record.cooldown_until >= today:
         _transition(session, record, "COOLDOWN", f"cooldown active until {record.cooldown_until}", "冷却期内只记录结构，不生成入场建议")
         session.commit()
@@ -248,7 +271,7 @@ def _create_entry_candidate(
         trigger_timeframe="15m",
         trigger_ts=trigger.trigger_ts,
         trigger_level=trigger.trigger_level,
-        expires_at=structure.expires_at,
+        expires_at=trigger.trigger_ts + timedelta(minutes=15 * CORRECTION_CONFIG.signal_expiry_bars),
         script_version=f"{structure.script_version or 'structure-v1'}+{trigger.script_version}",
         reason=(
             f"{trigger.reason}; {source_reason}; stop_source={structure_stop.reason}; "
@@ -276,6 +299,38 @@ def _manage_position(session: Session, record: TradingState, position: Position,
     if bar.close <= position.stop_price:
         _create_exit_signal(session, position, "硬止损触发，最高优先级清仓候选")
         _transition(session, record, "EXIT_CANDIDATE", "hard stop triggered", "等待人工确认模拟退出")
+        return
+    entry_signal = session.get(TradeSignal, position.entry_signal_id)
+    if entry_signal:
+        trigger_failure = entry_trigger_failure_reason(session, entry_signal)
+        if trigger_failure:
+            _create_exit_signal(session, position, f"15 分钟入场触发失败：{trigger_failure}")
+            _transition(session, record, "EXIT_CANDIDATE", trigger_failure, "等待人工确认退出，不执行实盘自动下单")
+            return
+    if market_state not in TRADEABLE_MARKETS:
+        hourly = _latest_bar_and_indicator(session, position.symbol, STRUCTURE_TIMEFRAME)
+        if hourly:
+            hour_bar, hour_indicator = hourly
+            if hour_indicator.ma60 is not None and hour_bar.close < hour_indicator.ma60:
+                _create_exit_signal(session, position, "市场降级且个股跌破 60 分钟 MA60，生成退出候选")
+                _transition(
+                    session,
+                    record,
+                    "EXIT_CANDIDATE",
+                    "market downgrade with 60m MA60 breakdown",
+                    "等待人工确认退出，不执行实盘自动下单",
+                )
+                return
+        if current_r > 0:
+            tightened_stop = position.entry_price
+            position.trailing_stop = max(position.trailing_stop or position.stop_price, tightened_stop)
+        _transition(
+            session,
+            record,
+            "RISK_PROTECTION",
+            f"market state {market_state} downgraded while position is open",
+            "暂停加仓并收紧风险，继续观察 60 分钟 MA60 和硬止损",
+        )
         return
     top_event = _latest_event(session, position.symbol, {"TOP_STRUCTURE"})
     if top_event and current_r > 0:
@@ -348,3 +403,13 @@ def _display_score(script: str, market_state: str) -> float:
     if market_state == "RISK_ON":
         base += 10
     return float(base)
+
+
+def _correction_next_wait(status: str) -> str:
+    if status == "CANCELLED_BY_STRUCTURE":
+        return "来源结构失败，进入冷却期并等待新的 60 分钟底结构"
+    if status == "CANCELLED_BY_TRIGGER":
+        return "原建议已取消；结构仍有效时等待新的 15 分钟趋势恢复触发"
+    if status == "CANCELLED_BY_MARKET":
+        return "市场降级，冻结新开仓并等待市场重新允许"
+    return "原建议已过期；如结构仍有效，等待新的 15 分钟触发"
