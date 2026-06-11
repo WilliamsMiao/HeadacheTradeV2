@@ -40,6 +40,7 @@ def test_refresh_trade_plan_prices_updates_live_values(session):
     payload = refresh_trade_plan_prices(session, QuoteProvider())
 
     assert payload["prices"] == {"AAPL": 201.25, "MSFT": 420.5}
+    assert payload["statuses"] == {"AAPL": "ACTIVE", "MSFT": "ACTIVE"}
     plans = {plan.symbol: plan for plan in session.query(TradePlan).all()}
     assert plans["AAPL"].current_price == 201.25
     assert plans["MSFT"].current_change_pct == -0.0025

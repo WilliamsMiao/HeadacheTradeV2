@@ -52,6 +52,7 @@ def refresh_trade_plan_prices(session: Session, quote_provider) -> dict[str, obj
     return {
         "prices": prices,
         "changes": changes,
+        "statuses": {plan.symbol: plan.status for plan in plans},
         "updated_at": updated_at.isoformat(),
     }
 

@@ -66,7 +66,7 @@
   <div class="opportunity-grid">
     {% for item in command.executable %}
     {% set plan = item.record %}
-    <article class="opportunity-card severity-{{ item.status.severity }}">
+    <article class="opportunity-card severity-{{ item.status.severity }}" data-plan-symbol="{{ plan.symbol }}" data-plan-status="{{ plan.status }}" data-entry-price="{{ plan.breakout_entry_price or '' }}" data-no-chase-above="{{ plan.no_chase_above or '' }}" data-price-ready="{{ 'true' if item.price_gate_status == '价格条件已满足' else 'false' }}">
       <header><span class="priority priority-{{ plan.priority_level|lower }}">{{ plan.priority_level }}</span><div><strong>{{ plan.symbol }} · {{ plan.direction|label }}</strong><small>{{ plan.structure_type|label }}</small></div><span class="status-text">{{ item.status.display_name }}</span></header>
       <dl><div><dt>当前价</dt><dd data-live-price="{{ plan.symbol }}">{{ plan.current_price|price if plan.current_price else "获取中" }}</dd></div><div><dt>入场价</dt><dd>{{ plan.breakout_entry_price|price }}</dd></div><div><dt>禁止追价</dt><dd>{{ plan.no_chase_above|price }}</dd></div><div><dt>止损</dt><dd>{{ plan.stop_price|price }}</dd></div><div><dt>目标 1</dt><dd>{{ plan.target_1|price }}</dd></div><div><dt>资金</dt><dd>{{ plan.capital_status|label }}</dd></div></dl>
       <p><strong>下一步：</strong>{{ item.next_action }}</p>
