@@ -76,20 +76,100 @@ function taskResultMessage(taskName, payload) {
   return `${labels[taskName] || "任务完成"}${detail ? `。${detail}` : ""}`;
 }
 
+let taskPollTimer;
+
 document.querySelectorAll("[data-task]").forEach((button) => {
   button.addEventListener("click", async () => {
     setButtonLoading(button, true);
     try {
       const payload = await postJson(`/tasks/${button.dataset.task}`);
+      if (payload.id && ["PENDING", "RUNNING"].includes(payload.status)) {
+        renderTaskProgress(payload);
+        setTaskButtonsDisabled(true);
+        pollTask(payload.id);
+        return;
+      }
       showToast(taskResultMessage(button.dataset.task, payload), "success");
       window.setTimeout(() => window.location.reload(), 800);
     } catch (error) {
       showToast(error.message, "error");
-    } finally {
       setButtonLoading(button, false);
     }
   });
 });
+
+async function restoreActiveTask() {
+  if (!document.querySelector("[data-task-progress]")) return;
+  try {
+    const payload = await getJson("/api/tasks/active");
+    if (payload.id && ["PENDING", "RUNNING"].includes(payload.status)) {
+      renderTaskProgress(payload);
+      setTaskButtonsDisabled(true);
+      pollTask(payload.id);
+    }
+  } catch (_) {
+    // The dashboard remains usable if task status cannot be restored.
+  }
+}
+
+async function pollTask(taskId) {
+  window.clearTimeout(taskPollTimer);
+  try {
+    const payload = await getJson(`/api/tasks/${taskId}`);
+    renderTaskProgress(payload);
+    if (["PENDING", "RUNNING"].includes(payload.status)) {
+      taskPollTimer = window.setTimeout(() => pollTask(taskId), 1000);
+      return;
+    }
+    setTaskButtonsDisabled(false);
+    if (payload.status === "SUCCEEDED") {
+      const failed = Number(payload.result?.failed || 0);
+      const tone = failed ? "error" : "success";
+      showToast(
+        failed
+          ? `行情更新完成，但有 ${failed} 个周期失败。请查看任务结果后重试。`
+          : taskResultMessage(payload.name, payload.result),
+        tone,
+      );
+      window.setTimeout(() => window.location.reload(), 1400);
+    } else {
+      showToast(payload.error || payload.message || "后台任务执行失败", "error");
+    }
+  } catch (error) {
+    setTaskButtonsDisabled(false);
+    showToast(`无法读取后台任务状态：${error.message}`, "error");
+  }
+}
+
+function renderTaskProgress(payload) {
+  const container = document.querySelector("[data-task-progress]");
+  if (!container) return;
+  const labels = {
+    "update-market-data": "更新行情",
+    "run-backtest": "生成复盘",
+  };
+  const percent = Math.max(0, Math.min(100, Number(payload.progress_pct || 0)));
+  container.hidden = false;
+  container.querySelector("[data-task-progress-title]").textContent = labels[payload.name] || "后台任务";
+  container.querySelector("[data-task-progress-message]").textContent =
+    payload.error || payload.message || "正在执行";
+  container.querySelector("[data-task-progress-value]").textContent = `${percent.toFixed(0)}%`;
+  container.querySelector("[data-task-progress-bar]").style.width = `${percent}%`;
+  const track = container.querySelector("[role='progressbar']");
+  track.setAttribute("aria-valuenow", String(percent));
+}
+
+function setTaskButtonsDisabled(disabled) {
+  document.querySelectorAll("[data-task]").forEach((button) => {
+    button.disabled = disabled;
+    if (!disabled) {
+      button.removeAttribute("aria-busy");
+      button.textContent = button.dataset.originalText || button.textContent;
+    }
+  });
+}
+
+restoreActiveTask();
 
 document.querySelectorAll("[data-logout]").forEach((button) => {
   button.addEventListener("click", async () => {

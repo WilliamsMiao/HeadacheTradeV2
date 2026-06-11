@@ -30,6 +30,7 @@ def test_dashboard_renders_chinese_labels_without_key_internal_tags():
     assert ">BOTTOM_STRUCTURE<" not in response.text
     assert "/static/styles.css?v=" in response.text
     assert "/static/app.js?v=" in response.text
+    assert "data-task-progress" in response.text
 
 
 def test_risk_page_groups_settings_in_chinese():
