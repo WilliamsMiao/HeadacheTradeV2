@@ -76,3 +76,12 @@ jobs:
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
         run: curl --fail --retry 10 --retry-delay 2 --retry-connrefused "http://${SERVER_HOST}/health"
+      - name: Verify Futu simulated account connectivity
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_PORT: ${{ secrets.SERVER_PORT }}
+        run: |
+          PORT="${SERVER_PORT:-22}"
+          ssh -i ~/.ssh/deploy_key -p "$PORT" "$SERVER_USER@$SERVER_HOST" \
+            "sudo -u headachetrade bash -lc 'set -a; source /etc/headachetrade/headachetrade.env; set +a; cd /opt/headachetrade/current; .venv/bin/python -m app.cli check-sim-account'"

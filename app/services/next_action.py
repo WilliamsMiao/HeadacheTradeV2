@@ -3,9 +3,30 @@ from app.presentation_status import status_for
 
 
 def describe_trade_plan_next_action(plan: TradePlan) -> str:
-    if plan.status in {"ACTIVE", "PLANNED"} and plan.breakout_entry_price:
-        chase = f"，且不得高于 {plan.no_chase_above:.2f}" if plan.no_chase_above else ""
-        return f"等待价格突破 {plan.breakout_entry_price:.2f}{chase}。"
+    current_price = getattr(plan, "current_price", None)
+    breakout_entry_price = getattr(plan, "breakout_entry_price", None)
+    no_chase_above = getattr(plan, "no_chase_above", None)
+    price_ready = (
+        bool(current_price)
+        and bool(breakout_entry_price)
+        and current_price >= breakout_entry_price
+        and (not no_chase_above or current_price <= no_chase_above)
+    )
+    rules_reject_reason = getattr(plan, "rules_reject_reason", "")
+    capital_status = getattr(plan, "capital_status", "")
+    capital_reason = getattr(plan, "capital_reason", "")
+    if price_ready and rules_reject_reason:
+        return f"价格条件已满足，但规则审批未通过：{rules_reject_reason}"
+    if price_ready and (capital_status == "CAPITAL_UNKNOWN" or capital_reason):
+        reason = capital_reason or "无法确认模拟账户资金、持仓和未成交订单"
+        return f"资金状态未知，禁止下单：{reason}"
+    if price_ready and plan.status != "TRIGGERED":
+        return "价格条件满足，但计划尚未完成实时校验；价格已到，等待 sim loop 推进为 TRIGGERED。"
+    if price_ready:
+        return "价格条件已满足，等待规则审批和资金校验。"
+    if plan.status in {"ACTIVE", "PLANNED", "ARMED"} and breakout_entry_price:
+        chase = f"，且不得高于 {no_chase_above:.2f}" if no_chase_above else ""
+        return f"等待价格突破 {breakout_entry_price:.2f}{chase}。"
     if plan.status == "NO_CHASE":
         return "不追单，等待价格回踩计划区或计划失效。"
     if plan.status in {"WAITLIST", "MISSED_BY_CAPITAL"}:
