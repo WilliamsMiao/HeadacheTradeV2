@@ -1,4 +1,14 @@
-from app.presentation import describe_market_reason, format_money, format_percent, format_reason, format_shares, label_for
+from datetime import datetime
+
+from app.presentation import (
+    describe_market_reason,
+    format_money,
+    format_percent,
+    format_reason,
+    format_shares,
+    format_system_datetime,
+    label_for,
+)
 
 
 def test_known_labels_are_translated_to_chinese():
@@ -59,3 +69,7 @@ def test_market_data_failure_is_not_described_as_confirmed_market_weakness():
     description = describe_market_reason("RISK_OFF", "SPY market data or indicators missing")
     assert "数据或指标不完整" in description
     assert "不代表市场已经确认转弱" in description
+
+
+def test_system_datetime_converts_naive_utc_to_hong_kong_time():
+    assert format_system_datetime(datetime(2026, 6, 11, 6, 30)) == "2026-06-11 14:30"

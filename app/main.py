@@ -5,7 +5,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import case, select
 from sqlalchemy.orm import Session
 from starlette.requests import Request
 
@@ -71,6 +71,7 @@ from app.presentation import (
     describe_market_reason,
     describe_script,
     format_datetime,
+    format_system_datetime,
     format_money,
     format_percent,
     format_price,
@@ -99,6 +100,7 @@ templates.env.filters["shares"] = format_shares
 templates.env.filters["price"] = format_price
 templates.env.filters["return_pct"] = format_return
 templates.env.filters["dt"] = format_datetime
+templates.env.filters["system_dt"] = format_system_datetime
 templates.env.filters["css_class"] = css_class_for
 templates.env.filters["json_list"] = json_list
 
@@ -283,7 +285,7 @@ def trade_plans_page(request: Request, session: Session = Depends(get_session)):
         session.scalars(
             select(TradePlan)
             .where(TradePlan.status == "ACTIVE")
-            .order_by(TradePlan.priority_level, TradePlan.updated_at.desc())
+            .order_by(_trade_plan_priority_order(), TradePlan.updated_at.desc())
         )
     )
     return templates.TemplateResponse(request, "trade_plans.html", {"plans": plans})
@@ -596,7 +598,7 @@ def _dashboard_context(session: Session) -> dict[str, object]:
         session.scalars(
             select(TradePlan)
             .where(TradePlan.status == "ACTIVE")
-            .order_by(TradePlan.priority_level, TradePlan.updated_at.desc())
+            .order_by(_trade_plan_priority_order(), TradePlan.updated_at.desc())
             .limit(6)
         )
     )
@@ -622,6 +624,16 @@ def _dashboard_context(session: Session) -> dict[str, object]:
         "approvals": approvals,
         "summary": summary,
     }
+
+
+def _trade_plan_priority_order():
+    return case(
+        (TradePlan.priority_level == "S", 0),
+        (TradePlan.priority_level == "A", 1),
+        (TradePlan.priority_level == "B", 2),
+        (TradePlan.priority_level == "C", 3),
+        else_=4,
+    )
 
 
 def _candidate_pool_counts(session: Session) -> dict[str, int]:

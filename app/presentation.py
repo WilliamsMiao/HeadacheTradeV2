@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import re
 import json
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 
 LABELS: dict[str, str] = {
@@ -350,3 +351,10 @@ def format_datetime(value: Any) -> str:
     if isinstance(value, date):
         return value.strftime("%Y-%m-%d")
     return str(value) if value else "-"
+
+
+def format_system_datetime(value: Any) -> str:
+    if not isinstance(value, datetime):
+        return format_datetime(value)
+    utc_value = value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+    return utc_value.astimezone(ZoneInfo("Asia/Hong_Kong")).strftime("%Y-%m-%d %H:%M")

@@ -169,6 +169,54 @@ def test_dashboard_uses_most_recently_computed_market_state(session):
     assert _dashboard_context(session)["market"].state == "RISK_ON"
 
 
+def test_dashboard_trade_plans_put_s_level_before_a_level(session):
+    for index in range(7):
+        session.add(
+            TradePlan(
+                symbol=f"A{index}",
+                source_structure_id=100 + index,
+                battle_pool_id=100 + index,
+                structure_type="BOTTOM_STRUCTURE",
+                priority_level="A",
+                stop_price=90,
+                target_1=110,
+                target_2=120,
+                trailing_rule="trail",
+                time_stop_rule="time",
+                invalid_condition="invalid",
+                risk_reward_1=1.5,
+                risk_reward_2=2,
+                reason="A plan",
+                status="ACTIVE",
+            )
+        )
+    session.add(
+        TradePlan(
+            symbol="S_TOP",
+            source_structure_id=999,
+            battle_pool_id=999,
+            structure_type="BOTTOM_STRUCTURE",
+            priority_level="S",
+            stop_price=90,
+            target_1=110,
+            target_2=120,
+            trailing_rule="trail",
+            time_stop_rule="time",
+            invalid_condition="invalid",
+            risk_reward_1=1.5,
+            risk_reward_2=2,
+            reason="S plan",
+            status="ACTIVE",
+        )
+    )
+    session.commit()
+
+    plans = _dashboard_context(session)["plans"]
+    assert len(plans) == 6
+    assert plans[0].symbol == "S_TOP"
+    assert plans[0].priority_level == "S"
+
+
 def test_trade_plan_page_renders_entry_stop_targets_and_rules():
     client = authenticated_client()
     with SessionLocal() as session:

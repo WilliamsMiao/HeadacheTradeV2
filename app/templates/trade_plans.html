@@ -32,7 +32,7 @@
       <div><strong>时间止损</strong><p>{{ plan.time_stop_rule }}</p></div>
       <div><strong>失效条件</strong><p>{{ plan.invalid_condition }}</p></div>
     </div>
-    <footer><p>{{ plan.reason }}</p><small>更新时间 {{ plan.updated_at|dt }}</small></footer>
+    <footer><p>{{ plan.reason }}</p><small>更新时间 {{ plan.updated_at|system_dt }}（香港时间）</small></footer>
   </article>
   {% else %}
   <div class="panel empty-page"><div class="empty"><strong>暂无有效交易计划</strong><span>先运行每日完整扫描。没有明确止损位的结构不会生成计划。</span></div></div>
