@@ -1,0 +1,17 @@
+[Unit]
+Description=Refresh HeadacheTradeV2 after each completed US 60-minute bar
+
+[Timer]
+OnCalendar=Mon..Fri *-*-* 10:35:00 America/New_York
+OnCalendar=Mon..Fri *-*-* 11:35:00 America/New_York
+OnCalendar=Mon..Fri *-*-* 12:35:00 America/New_York
+OnCalendar=Mon..Fri *-*-* 13:35:00 America/New_York
+OnCalendar=Mon..Fri *-*-* 14:35:00 America/New_York
+OnCalendar=Mon..Fri *-*-* 15:35:00 America/New_York
+OnCalendar=Mon..Fri *-*-* 16:05:00 America/New_York
+Persistent=false
+AccuracySec=1min
+Unit=headachetrade-60m.service
+
+[Install]
+WantedBy=timers.target

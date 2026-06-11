@@ -24,6 +24,11 @@ jobs:
         run: uv run pytest -q
       - name: Check frontend JavaScript
         run: node --check app/static/app.js
+      - name: Check systemd schedules
+        run: |
+          systemd-analyze calendar 'Mon..Fri *-*-* 08:45:00 America/New_York'
+          systemd-analyze calendar 'Mon..Fri *-*-* 10:35:00 America/New_York'
+          systemd-analyze calendar 'Mon..Fri *-*-* 16:05:00 America/New_York'
       - name: Check patch formatting
         run: git diff --check HEAD^ HEAD
 

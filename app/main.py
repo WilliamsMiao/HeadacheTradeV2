@@ -54,6 +54,7 @@ from app.services.pipeline import (
     run_update_market_data,
 )
 from app.services.pipeline import symbol_data_status
+from app.services.pipeline_lock import pipeline_lock
 from app.services.market import market_diagnostics
 from app.services import opend_admin
 from app.services.risk import get_or_create_risk_config
@@ -495,28 +496,29 @@ def task_status(task_id: str):
 
 
 def _run_background_task(task_name: str, settings, mock: bool, progress):
-    with SessionLocal() as session:
-        if task_name == "screen-market":
-            progress(0, 1, "正在通过 Futu 条件选股扫描美股市场")
-            result = run_screen_market(session, settings, use_mock=mock)
-            progress(1, 1, "候选池已生成")
-            return result
-        if task_name == "update-market-data":
-            return run_update_market_data(session, settings, use_mock=mock, on_progress=progress)
-        if task_name == "run-daily":
-            return run_daily(session, settings, use_mock=mock, on_progress=progress)
-        if task_name == "run-60m":
-            return run_60m(session, settings, use_mock=mock, on_progress=progress)
-        if task_name == "set-price-alerts":
-            progress(0, 1, "正在同步 Futu 到价提醒")
-            result = run_set_price_alerts(session, settings, use_mock=mock)
-            progress(1, 1, "到价提醒已同步")
-            return result
-        if task_name == "run-backtest":
-            progress(0, 1, "正在执行时间步进复盘")
-            result = run_backtest(session, settings)
-            progress(1, 1, "复盘数据已生成")
-            return result
+    with pipeline_lock():
+        with SessionLocal() as session:
+            if task_name == "screen-market":
+                progress(0, 1, "正在通过 Futu 条件选股扫描美股市场")
+                result = run_screen_market(session, settings, use_mock=mock)
+                progress(1, 1, "候选池已生成")
+                return result
+            if task_name == "update-market-data":
+                return run_update_market_data(session, settings, use_mock=mock, on_progress=progress)
+            if task_name == "run-daily":
+                return run_daily(session, settings, use_mock=mock, on_progress=progress)
+            if task_name == "run-60m":
+                return run_60m(session, settings, use_mock=mock, on_progress=progress)
+            if task_name == "set-price-alerts":
+                progress(0, 1, "正在同步 Futu 到价提醒")
+                result = run_set_price_alerts(session, settings, use_mock=mock)
+                progress(1, 1, "到价提醒已同步")
+                return result
+            if task_name == "run-backtest":
+                progress(0, 1, "正在执行时间步进复盘")
+                result = run_backtest(session, settings)
+                progress(1, 1, "复盘数据已生成")
+                return result
     raise ValueError("不支持的后台任务")
 
 

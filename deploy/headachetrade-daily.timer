@@ -1,0 +1,11 @@
+[Unit]
+Description=Run HeadacheTradeV2 daily scan before the US market opens
+
+[Timer]
+OnCalendar=Mon..Fri *-*-* 08:45:00 America/New_York
+Persistent=true
+AccuracySec=1min
+Unit=headachetrade-daily.service
+
+[Install]
+WantedBy=timers.target

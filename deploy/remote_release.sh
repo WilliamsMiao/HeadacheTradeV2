@@ -95,8 +95,13 @@ previous_release="$(readlink -f "${CURRENT_LINK}" || true)"
 ln -sfn "${RELEASE_DIR}" "${CURRENT_LINK}"
 
 install -m 0644 deploy/headachetrade.service "/etc/systemd/system/${SERVICE_NAME}"
+install -m 0644 deploy/headachetrade-daily.service /etc/systemd/system/headachetrade-daily.service
+install -m 0644 deploy/headachetrade-daily.timer /etc/systemd/system/headachetrade-daily.timer
+install -m 0644 deploy/headachetrade-60m.service /etc/systemd/system/headachetrade-60m.service
+install -m 0644 deploy/headachetrade-60m.timer /etc/systemd/system/headachetrade-60m.timer
 systemctl daemon-reload
 systemctl enable "${SERVICE_NAME}"
+systemctl enable --now headachetrade-daily.timer headachetrade-60m.timer
 if ! systemctl restart "${SERVICE_NAME}"; then
   if [[ -n "${previous_release}" && -d "${previous_release}" ]]; then
     ln -sfn "${previous_release}" "${CURRENT_LINK}"
