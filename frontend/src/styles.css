@@ -344,6 +344,72 @@ a:focus-visible {
   display: block;
 }
 
+.structure-strip {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e5e5e5;
+}
+
+.structure-strip__heading {
+  display: flex;
+  justify-content: space-between;
+  color: #262626;
+  font-size: 13px;
+}
+
+.structure-strip__heading span,
+.structure-strip > p {
+  color: #737373;
+}
+
+.structure-event-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.structure-event {
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.structure-event summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 40px;
+  padding: 10px 12px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.structure-event summary::marker {
+  color: #737373;
+}
+
+.structure-event time {
+  color: #737373;
+  font-size: 12px;
+}
+
+.structure-event p {
+  margin: 0;
+  padding: 0 12px 8px;
+  color: #525252;
+  line-height: 1.5;
+}
+
+.structure-event > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 8px 12px;
+  border-top: 1px solid #f0f0f0;
+  color: #737373;
+  font-size: 12px;
+}
+
 .chart-plan-summary span {
   color: #737373;
   font-size: 12px;

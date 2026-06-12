@@ -19,6 +19,36 @@ export interface KlineBar {
   volume: number;
 }
 
+export interface TradePlanOverlayLine {
+  type: 'ENTRY' | 'NO_CHASE' | 'STOP' | 'TARGET_1' | 'TARGET_2' | 'CURRENT';
+  label: string;
+  price: number;
+}
+
+export interface TradePlanOverlay {
+  symbol: string;
+  plan_id: number | null;
+  lines: TradePlanOverlayLine[];
+}
+
+export interface StructureMarker {
+  id: number;
+  symbol: string;
+  timeframe: string;
+  event_ts: string;
+  event_type: string;
+  display_name: string;
+  price: number;
+  pivot_low: number | null;
+  pivot_high: number | null;
+  trigger_level: number | null;
+  confirm_level: number | null;
+  invalidation_level: number | null;
+  reason: string;
+  linked_battle_item_id: number | null;
+  linked_trade_plan_id: number | null;
+}
+
 export interface StatusPresentation {
   code: string;
   display_name: string;

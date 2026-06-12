@@ -88,7 +88,9 @@ from app.services.terminal_api import (
     orders_payload,
     positions_payload,
     response_envelope,
+    structures_payload,
     terminal_summary,
+    trade_plan_overlay_payload,
     trade_plan_detail,
     trade_plan_list,
 )
@@ -419,6 +421,31 @@ def kline_api(
         "anomaly_count": payload["anomaly_count"],
     }
     return response
+
+
+@app.get("/api/trade-plan-overlays")
+def trade_plan_overlays_api(
+    symbol: str,
+    plan_id: int | None = None,
+    session: Session = Depends(get_session),
+):
+    payload = trade_plan_overlay_payload(session, symbol, plan_id)
+    return response_envelope(payload, source="HEADACHE_TRADE_DB")
+
+
+@app.get("/api/structures")
+def structures_api(
+    symbol: str,
+    timeframe: str = "60m",
+    limit: int = 100,
+    session: Session = Depends(get_session),
+):
+    try:
+        events = structures_payload(session, symbol, timeframe, limit)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    synced_at = max((event["event_ts"] for event in events), default=None)
+    return response_envelope(events, source="HEADACHE_TRADE_DB", synced_at=synced_at)
 
 
 @app.get("/sim-orders", response_class=HTMLResponse)

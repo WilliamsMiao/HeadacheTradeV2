@@ -3,7 +3,7 @@ import { ReloadOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { lazy, Suspense } from 'react';
 
-import { getKlines } from '../../api/terminal';
+import { getKlines, getStructures, getTradePlanOverlay } from '../../api/terminal';
 import { useTerminalStore } from '../../store/terminalStore';
 import type { TradePlan } from '../../types/api';
 import { EmptyState } from '../common/EmptyState';
@@ -25,7 +25,18 @@ export function MarketChartPanel({ plan }: MarketChartPanelProps) {
     queryKey: ['kline', plan.symbol, timeframe],
     queryFn: () => getKlines(plan.symbol, timeframe, timeframe === '1d' ? 250 : 300),
   });
+  const overlayQuery = useQuery({
+    queryKey: ['trade-plan-overlay', plan.id],
+    queryFn: () => getTradePlanOverlay(plan.symbol, plan.id),
+  });
+  const structuresQuery = useQuery({
+    queryKey: ['structures', plan.symbol, timeframe],
+    queryFn: () => getStructures(plan.symbol, timeframe),
+    enabled: timeframe === '60m',
+  });
   const bars = query.data?.data ?? [];
+  const overlayLines = overlayQuery.data?.data.lines ?? [];
+  const structures = timeframe === '60m' ? (structuresQuery.data?.data ?? []) : [];
   const syncedAt = query.data?.meta.synced_at;
 
   return (
@@ -78,7 +89,7 @@ export function MarketChartPanel({ plan }: MarketChartPanelProps) {
         ) : null}
         {!query.isLoading && !query.isError && bars.length > 0 ? (
           <Suspense fallback={<LoadingBlock />}>
-            <KlineChart bars={bars} />
+            <KlineChart bars={bars} overlayLines={overlayLines} structures={structures} />
           </Suspense>
         ) : null}
       </div>
@@ -88,6 +99,34 @@ export function MarketChartPanel({ plan }: MarketChartPanelProps) {
         <div><span>硬止损价</span><strong>{plan.stop_price.toFixed(2)}</strong></div>
         <div><span>第一目标价</span><strong>{plan.target_1.toFixed(2)}</strong></div>
       </div>
+      {timeframe === '60m' ? (
+        <section className="structure-strip" aria-label="图中结构事件">
+          <div className="structure-strip__heading">
+            <strong>图中结构事件</strong>
+            <span>{structures.length} 项</span>
+          </div>
+          {structures.length === 0 ? (
+            <p>当前可见周期内暂无结构事件。</p>
+          ) : (
+            <div className="structure-event-list">
+              {structures.slice(-6).reverse().map((structure) => (
+                <details className="structure-event" key={structure.id}>
+                  <summary>
+                    <span>{structure.display_name}</span>
+                    <time>{new Date(structure.event_ts).toLocaleString('zh-CN', { hour12: false })}</time>
+                  </summary>
+                  <p>{structure.reason}</p>
+                  <div>
+                    <span>事件价 {structure.price.toFixed(2)}</span>
+                    <span>{structure.linked_battle_item_id ? '已进入结构作战池' : '未进入结构作战池'}</span>
+                    <span>{structure.linked_trade_plan_id ? '已生成交易计划' : '未生成交易计划'}</span>
+                  </div>
+                </details>
+              ))}
+            </div>
+          )}
+        </section>
+      ) : null}
     </section>
   );
 }

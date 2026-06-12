@@ -108,6 +108,15 @@ beforeEach(() => {
           context: { symbol: 'US.AAPL', timeframe: '60m', anomaly_count: 0 },
         });
       }
+      if (path.startsWith('/api/trade-plan-overlays?')) {
+        return Response.json({
+          data: { symbol: 'US.AAPL', plan_id: 1, lines: [] },
+          meta: summary.meta,
+        });
+      }
+      if (path.startsWith('/api/structures?')) {
+        return Response.json({ data: [], meta: summary.meta });
+      }
       return Response.json({ data: [], meta: summary.meta });
     }),
   );
@@ -126,6 +135,7 @@ describe('TerminalPage', () => {
     expect(screen.getByText('REAL TRADING DISABLED')).toBeInTheDocument();
     expect(await screen.findByText('AAPL 行情')).toBeInTheDocument();
     expect(await screen.findByText('当前没有 60 分钟 K 线数据')).toBeInTheDocument();
+    expect(await screen.findByText('图中结构事件')).toBeInTheDocument();
     await waitFor(() => expect(screen.getAllByText('持续监控中').length).toBeGreaterThan(0));
   });
 });
