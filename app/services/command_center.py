@@ -19,9 +19,9 @@ BLOCKED = {"NO_CHASE", "WAITLIST", "MISSED_BY_CAPITAL", "BLOCKED", "PAUSED", "IN
 def command_center_payload(session: Session, settings: Settings) -> dict:
     plans = list(session.scalars(select(TradePlan).order_by(TradePlan.updated_at.desc())))
     positions = list(session.scalars(select(Position).where(Position.status == "OPEN").order_by(Position.updated_at.desc())))
-    executable = [_plan_view(session, plan, settings) for plan in plans if plan.priority_level in {"S", "A"} and plan.status in EXECUTABLE]
+    executable = [plan_view_model(session, plan, settings) for plan in plans if plan.priority_level in {"S", "A"} and plan.status in EXECUTABLE]
     executable.sort(key=lambda item: (_priority_rank(item["record"].priority_level), -item["record"].updated_at.timestamp()))
-    blocked = [_plan_view(session, plan, settings) for plan in plans if plan.status in BLOCKED or plan.rules_approval_status.startswith("REJECTED")]
+    blocked = [plan_view_model(session, plan, settings) for plan in plans if plan.status in BLOCKED or plan.rules_approval_status.startswith("REJECTED")]
     logs = list(session.scalars(select(AuditLog).order_by(AuditLog.created_at.desc()).limit(20)))
     funnel = {
         "候选池": session.scalar(select(func.count(CandidateStock.id)).where(CandidateStock.active.is_(True))) or 0,
@@ -64,7 +64,7 @@ def command_center_payload(session: Session, settings: Settings) -> dict:
     }
 
 
-def _plan_view(session: Session, plan: TradePlan, settings: Settings) -> dict:
+def plan_view_model(session: Session, plan: TradePlan, settings: Settings) -> dict:
     status = status_for(plan.status)
     validation = _latest_validation(session, plan)
     current = float(plan.current_price or 0)
@@ -114,6 +114,7 @@ def _plan_view(session: Session, plan: TradePlan, settings: Settings) -> dict:
         "capital_status": plan.capital_status,
         "block_reason": block_reason,
         "checks": checks,
+        "summary_checks": [check for check in checks if check[1] is not True][:3],
     }
 
 

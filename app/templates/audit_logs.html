@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+<header class="page-header compact">
+  <div><h1>系统审计</h1><p>面向排障的原始系统动作记录；交易员复盘请使用“交易复盘”。</p></div>
+  <div class="header-actions"><a class="button-secondary" href="/journal">返回交易复盘</a></div>
+</header>
+<section class="panel journal-panel">
+  <div class="panel-head"><div class="panel-head-copy"><h2>最近系统动作</h2><span>实时校验、审批、同步、订单和异常均按时间保留</span></div><small>{{ logs|length }} 条</small></div>
+  <ol class="action-timeline journal-timeline">
+  {% for log in logs %}
+    <li><time>{{ log.created_at|system_dt }}</time><span class="timeline-dot"></span><div><strong>{{ log.action|label }}{% if log.symbol %} · {{ log.symbol }}{% endif %}</strong><span class="state">{{ log.status|label }}</span><p>{{ log.reason or "系统已完成该步骤" }}</p></div></li>
+  {% else %}
+    <li class="timeline-empty">暂无系统审计记录。</li>
+  {% endfor %}
+  </ol>
+</section>
+{% endblock %}

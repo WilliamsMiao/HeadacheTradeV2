@@ -62,7 +62,7 @@
 </section>
 
 <section class="command-section">
-  <div class="section-heading"><div><h2>今日可执行机会</h2><p>只展示真正进入执行阶段的 S/A 级计划，S 级始终优先。</p><small class="live-price-status" data-live-price-status>正在连接 OpenD 获取实时价</small></div><a class="text-link" href="/trade-plans">查看全部计划</a></div>
+  <div class="section-heading"><div><h2>今日重点监控计划</h2><p>首页仅展示 S/A 级摘要；完整检查、来源链路和执行记录以交易计划详情为准。</p><small class="live-price-status" data-live-price-status>正在连接 OpenD 获取实时价</small></div><a class="text-link" href="/trade-plans">打开交易计划详情</a></div>
   <div class="opportunity-grid">
     {% for item in command.executable %}
     {% set plan = item.record %}
@@ -75,14 +75,11 @@
         <span>规则审批：{{ item.rules_approval_status|label }}</span><span>资金：{{ item.capital_status|label }}</span>
       </div>
       {% if item.block_reason %}<p class="block-reason-line"><strong>当前阻塞：</strong>{{ item.block_reason }}</p>{% endif %}
-      <details class="entry-checks">
-        <summary>为什么没有入场？</summary>
-        <ul>{% for label, passed, detail in item.checks %}<li class="{{ 'passed' if passed is sameas true else 'failed' if passed is sameas false else 'unknown' }}"><span>{{ label }}<small>{{ detail }}</small></span><strong>{{ "通过" if passed is sameas true else "未通过" if passed is sameas false else "尚未校验" }}</strong></li>{% endfor %}</ul>
-      </details>
+      {% if item.summary_checks %}<ul class="summary-checks">{% for label, passed, detail in item.summary_checks %}<li><strong>{{ label }}</strong><span>{{ "未通过" if passed is sameas false else "尚未校验" }} · {{ detail }}</span></li>{% endfor %}</ul>{% endif %}
       <a class="text-link" href="/trade-plans#plan-{{ plan.id }}">查看完整交易计划</a>
     </article>
     {% else %}
-    <div class="command-empty"><strong>暂无可执行机会</strong><p>候选股和作战评级不等于可以交易；系统正在等待有效结构、价格和资金条件同时满足。</p></div>
+    <div class="command-empty"><strong>暂无重点监控计划</strong><p>候选股和作战评级不等于可以交易；系统正在等待有效结构、价格和资金条件同时满足。</p></div>
     {% endfor %}
   </div>
 </section>
@@ -120,7 +117,7 @@
 </section>
 
 <section class="command-section">
-  <div class="section-heading"><div><h2>最近系统动作</h2><p>自动决策链按时间倒序记录。</p></div><a class="text-link" href="/journal">打开交易日志</a></div>
+  <div class="section-heading"><div><h2>最近系统动作</h2><p>这里是系统审计摘要，不等同于按交易聚合的复盘。</p></div><a class="text-link" href="/audit-logs">打开系统审计</a></div>
   <ol class="action-timeline">
     {% for log in command.timeline %}
     <li><time>{{ log.created_at|system_dt }}</time><span class="timeline-dot"></span><div><strong>{{ log.action|label }}{% if log.symbol %} · {{ log.symbol }}{% endif %}</strong><p>{{ log.reason or "系统已完成该步骤" }}</p></div></li>

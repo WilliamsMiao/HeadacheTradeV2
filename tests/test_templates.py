@@ -315,7 +315,8 @@ def test_simulation_pages_render_and_require_auth():
     for path, heading in (
         ("/sim-orders", "模拟订单"),
         ("/positions", "模拟持仓"),
-        ("/journal", "交易日志"),
+        ("/journal", "交易复盘"),
+        ("/audit-logs", "系统审计"),
     ):
         response = client.get(path)
         assert response.status_code == 200

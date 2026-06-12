@@ -1,7 +1,8 @@
 {% extends "base.html" %}
+{% from "_journey.html" import trade_journey %}
 {% block content %}
 <header class="page-header compact">
-  <div><h1>交易计划执行台</h1><p>这里回答系统准备交易什么、卡在哪一步、为什么没有下单，以及下一步会做什么。</p><small class="live-price-status" data-live-price-status>正在连接 OpenD 获取实时价</small></div>
+  <div><h1>交易计划详情</h1><p>交易计划的权威页面：完整展示来源、价格、实时校验、规则审批、资金状态、订单和持仓链路。</p><small class="live-price-status" data-live-price-status>正在连接 OpenD 获取实时价</small></div>
   <div class="header-actions toolbar"><button data-task="run-pipeline" data-loading-text="正在生成">刷新交易计划</button><button class="secondary" data-task="set-price-alerts" data-loading-text="正在同步">同步到价提醒</button></div>
 </header>
 {% for group in groups %}
@@ -15,6 +16,7 @@
         <div><span class="priority priority-{{ plan.priority_level|lower }}">{{ plan.priority_level }}</span><h3>{{ plan.symbol }} · {{ plan.name }}</h3><small>{{ plan.direction|label }} · {{ plan.structure_type|label }}</small></div>
         <div class="plan-status"><strong>{{ item.status.display_name }}</strong><small>{{ item.status.description }}</small></div>
       </header>
+      {{ trade_journey(item.journey) }}
       <dl class="plan-levels compact-levels">
         <div><dt>当前价</dt><dd data-live-price="{{ plan.symbol }}">{{ plan.current_price|price if plan.current_price else "获取中" }}</dd></div>
         <div class="primary-level"><dt>关键触发价</dt><dd>{{ plan.breakout_entry_price|price }}</dd></div>
@@ -25,8 +27,27 @@
       </dl>
       <div class="execution-meta"><span>资金：{{ plan.capital_status|label }}</span><span>审批：{{ plan.rules_approval_status|label }}</span><span>建议股数：{{ plan.suggested_shares or "-" }}</span><span>收益风险：{{ plan.risk_reward_2 }}R</span></div>
       <div class="next-system-action"><strong>下一步系统动作</strong><p>{{ item.next_action }}</p></div>
+      <section class="authority-section">
+        <h4>当前执行结论</h4>
+        <div class="execution-gates">
+          <span>{{ item.price_gate_status }}</span><span>{{ item.validation_status }}</span>
+          <span>规则审批：{{ item.rules_approval_status|label }}</span><span>资金：{{ item.capital_status|label }}</span>
+        </div>
+        {% if item.block_reason %}<div class="blocking-reason"><strong>主阻塞原因</strong><p>{{ item.block_reason }}</p></div>{% endif %}
+      </section>
+      <details class="entry-checks" open>
+        <summary>完整入场检查</summary>
+        <ul>{% for label, passed, detail in item.checks %}<li class="{{ 'passed' if passed is sameas true else 'failed' if passed is sameas false else 'unknown' }}"><span>{{ label }}<small>{{ detail }}</small></span><strong>{{ "通过" if passed is sameas true else "未通过" if passed is sameas false else "尚未校验" }}</strong></li>{% endfor %}</ul>
+      </details>
+      <details class="score-details"><summary>来源结构与作战评分</summary><div class="plan-rules"><div><strong>日线 / 结构</strong><p>{{ plan.daily_state|label }} · {{ plan.structure_type|label }}</p></div><div><strong>作战评分</strong><p>{% if item.journey.battle %}{{ item.journey.battle.priority_level }} 级 · {{ "%.1f"|format(item.journey.battle.score) }} 分{% else %}来源记录不可用{% endif %}</p></div><div><strong>生成原因</strong><p>{{ plan.reason }}</p></div></div></details>
       <details class="score-details"><summary>查看持仓管理规则</summary><div class="plan-rules"><div><strong>移动止盈</strong><p>{{ plan.trailing_rule }}</p></div><div><strong>时间止损</strong><p>{{ plan.time_stop_rule }}</p></div><div><strong>失效条件</strong><p>{{ plan.invalid_condition }}</p></div></div></details>
-      {% if plan.rules_reject_reason or plan.capital_reason %}<div class="blocking-reason"><strong>当前阻塞原因</strong><p>{{ plan.rules_reject_reason or plan.capital_reason }}</p></div>{% endif %}
+      <details class="score-details"><summary>关联订单、持仓与校验记录</summary>
+        <div class="linked-records">
+          <p><strong>订单：</strong>{% if item.orders %}{% for order in item.orders %}<a href="/sim-orders#order-{{ order.id }}">{{ order.status|label }} · {{ order.submitted_at|system_dt }}</a>{% if not loop.last %}；{% endif %}{% endfor %}{% else %}尚未提交订单{% endif %}</p>
+          <p><strong>持仓：</strong>{% if item.position %}<a href="/positions#position-{{ item.position.id }}">{{ item.position.status|label }} · {{ "%.2f"|format(item.position.current_r) }}R</a>{% else %}尚未建立持仓{% endif %}</p>
+          <ol class="compact-timeline">{% for log in item.validation_logs %}<li><time>{{ log.created_at|system_dt }}</time><span>{{ log.action|label }} · {{ log.reason or log.status|label }}</span></li>{% else %}<li>暂无实时校验或审批记录</li>{% endfor %}</ol>
+        </div>
+      </details>
       <footer><small>最后校验 {{ plan.last_validated_at|system_dt }} · 更新 {{ plan.updated_at|system_dt }}</small></footer>
     </article>
   {% endfor %}

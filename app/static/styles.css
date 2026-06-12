@@ -1315,6 +1315,123 @@ td a + small {
   color: var(--color-text-muted);
 }
 
+.trade-journey,
+.mini-journey {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+}
+
+.trade-journey {
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.trade-journey a,
+.mini-journey a,
+.mini-journey span {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  color: var(--color-text-muted);
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.trade-journey a::after {
+  content: "›";
+  margin-left: var(--space-2);
+  color: var(--color-text-muted);
+}
+
+.trade-journey a:last-child::after {
+  content: "";
+  margin: 0;
+}
+
+.trade-journey .complete,
+.mini-journey .complete {
+  border-color: var(--color-success);
+  color: var(--color-success);
+}
+
+.trade-journey .current {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-weight: 700;
+}
+
+.trade-journey .pending,
+.mini-journey .pending {
+  pointer-events: none;
+  opacity: 0.62;
+}
+
+.summary-checks,
+.compact-timeline {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.summary-checks li,
+.compact-timeline li {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.summary-checks span,
+.compact-timeline time {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.authority-section,
+.linked-records {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.authority-section h4 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.journal-trade-list {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.journal-trade > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-3);
+}
+
+.journal-trade > header > div {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.journal-trade h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
 .blocked-list {
   display: grid;
   border: 1px solid var(--color-border);

@@ -57,11 +57,21 @@ def test_position_next_action_prioritizes_stop_risk():
     assert "接近止损" in describe_position_next_action(position)
 
 
-def test_trade_plan_groups_separate_execution_states():
-    active = SimpleNamespace(status="ACTIVE", breakout_entry_price=101.5, no_chase_above=103.0)
-    blocked = SimpleNamespace(status="BLOCKED", breakout_entry_price=None, no_chase_above=None)
-    groups = trade_plan_groups([active, blocked])
-    assert [group["title"] for group in groups] == ["可执行机会", "已拒绝"]
+def test_trade_plan_groups_separate_execution_states(session):
+    plans = []
+    for symbol, status in (("AAPL", "ACTIVE"), ("MSFT", "BLOCKED")):
+        plan = TradePlan(
+            symbol=symbol, name=symbol, direction="LONG", source_structure_id=1,
+            battle_pool_id=1, structure_type="BOTTOM_STRUCTURE", priority_level="A",
+            stop_price=90, target_1=110, target_2=120, trailing_rule="test",
+            time_stop_rule="test", invalid_condition="test", risk_reward_1=1.5,
+            risk_reward_2=2, status=status, reason="test",
+        )
+        session.add(plan)
+        plans.append(plan)
+    session.commit()
+    groups = trade_plan_groups(session, plans, Settings())
+    assert [group["title"] for group in groups] == ["待触发计划", "执行阻塞"]
 
 
 def test_command_center_orders_s_before_a(session):

@@ -10,7 +10,7 @@
     <tbody>
     {% for item in orders %}
     {% set order = item.record %}
-      <tr>
+      <tr id="order-{{ order.id }}">
         <td>{{ order.submitted_at|system_dt }}</td><td class="symbol-cell">{{ order.symbol }}</td><td>{{ order.side|label }}</td><td>{{ order.qty }}</td>
         <td>{{ order.limit_price|price }} / {{ order.dealt_avg_price|price }}</td>
         <td><span class="state state-{{ item.status.severity }}">{{ item.status.display_name }}</span></td>
