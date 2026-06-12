@@ -52,6 +52,17 @@ def main() -> None:
     args = parser.parse_args()
     settings = get_settings()
     init_db()
+    if args.command == "check-sim-account":
+        with SessionLocal() as session:
+            provider = FutuTradeProvider(settings)
+            try:
+                payload = check_sim_account_connection(session, provider, settings)
+            finally:
+                provider.close()
+        print(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+        if not payload.get("ok"):
+            raise SystemExit(1)
+        return
     try:
         with pipeline_lock():
             with SessionLocal() as session:
@@ -85,12 +96,6 @@ def main() -> None:
                     "run-sim-loop",
                 }:
                     payload = run_sim_loop(session, settings, args.mock)
-                elif args.command == "check-sim-account":
-                    provider = FutuTradeProvider(settings)
-                    try:
-                        payload = check_sim_account_connection(session, provider, settings)
-                    finally:
-                        provider.close()
                 elif args.command == "run-pipeline":
                     payload = run_pipeline(session, settings)
                 else:
