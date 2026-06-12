@@ -2,7 +2,7 @@
 {% from "_journey.html" import trade_journey %}
 {% block content %}
 <header class="page-header compact">
-  <div><h1>交易复盘</h1><p>按交易计划聚合来源结构、执行过程、订单、持仓结果和关键系统动作。</p></div>
+  <div><h1>交易复盘</h1><p>只收录已经产生模拟成交或持仓的交易，按完整链路聚合执行过程和结果。</p></div>
   <div class="header-actions"><a class="button-secondary" href="/audit-logs">查看系统审计</a></div>
 </header>
 <div class="journal-trade-list">
@@ -15,7 +15,7 @@
     <details class="score-details"><summary>查看交易过程</summary><ol class="compact-timeline">{% for log in trade.logs %}<li><time>{{ log.created_at|system_dt }}</time><span>{{ log.action|label }} · {{ log.reason or log.status|label }}</span></li>{% else %}<li>暂无关联动作</li>{% endfor %}</ol></details>
   </article>
   {% else %}
-  <div class="panel empty-page"><div class="empty"><strong>暂无可复盘交易计划</strong><span>生成计划后，系统会在这里聚合订单、持仓和结果。</span></div></div>
+  <div class="panel empty-page"><div class="empty"><strong>暂无已成交交易</strong><span>模拟订单产生实际成交或建立持仓后，才会进入交易复盘。</span></div></div>
   {% endfor %}
 </div>
 {% endblock %}
