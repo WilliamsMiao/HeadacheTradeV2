@@ -36,7 +36,7 @@ def test_trade_plan_next_action_does_not_wait_for_breakout_inside_price_gate():
     )
     text = describe_trade_plan_next_action(plan)
     assert "等待价格突破" not in text
-    assert "价格条件满足，但计划尚未完成实时校验" in text
+    assert "价格已经进入允许入场的区间" in text
 
 
 def test_trade_plan_next_action_blocks_unknown_capital():
@@ -49,7 +49,27 @@ def test_trade_plan_next_action_blocks_unknown_capital():
         capital_status="CAPITAL_UNKNOWN",
         capital_reason="",
     )
-    assert "资金状态未知，禁止下单" in describe_trade_plan_next_action(plan)
+    assert "暂时无法确认账户是否有足够资金" in describe_trade_plan_next_action(plan)
+
+
+def test_trade_plan_checks_use_natural_language(session):
+    session.add(TradePlan(
+        symbol="AAPL", name="Apple", direction="LONG", source_structure_id=1,
+        battle_pool_id=1, structure_type="BOTTOM_STRUCTURE", priority_level="S",
+        breakout_entry_price=175, no_chase_above=180.14, current_price=180.77,
+        stop_price=170, target_1=185, target_2=190, trailing_rule="test",
+        time_stop_rule="test", invalid_condition="test", risk_reward_1=1.5,
+        risk_reward_2=2, status="ACTIVE", reason="test",
+    ))
+    session.commit()
+
+    item = command_center_payload(session, Settings())["executable"][0]
+
+    price_check = next(check for check in item["checks"] if check["label"] == "当前价格仍适合入场")
+    assert "当前价 180.77 已高于最高可接受入场价 180.14" in price_check["detail"]
+    assert "为避免追高" in price_check["detail"]
+    assert all(">=" not in check["label"] and "<=" not in check["label"] for check in item["checks"])
+    assert all("TRIGGERED" not in check["detail"] and "ACTIVE" not in check["detail"] for check in item["checks"])
 
 
 def test_position_next_action_prioritizes_stop_risk():

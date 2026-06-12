@@ -49,7 +49,7 @@
     <div><dt>Futu 持仓</dt><dd>{{ portfolio_sync.remote_positions if portfolio_sync.remote_positions is defined else "-" }}</dd></div>
     <div><dt>Futu 未成交订单</dt><dd>{{ portfolio_sync.remote_orders if portfolio_sync.remote_orders is defined else "-" }}</dd></div>
   </dl>
-  {% if not portfolio_sync.ok %}<div class="blocking-reason"><strong>禁止自动下单</strong><p>无法确认模拟账户资金/持仓/open order，因此不会自动下单。{{ portfolio_sync.error or portfolio_sync.reason }}</p></div>{% endif %}
+  {% if not portfolio_sync.ok %}<div class="blocking-reason"><strong>暂时无法自动下单</strong><p>系统尚未确认模拟账户的可用资金、当前持仓和待成交订单，因此会暂停提交新订单。{{ portfolio_sync.error or portfolio_sync.reason }}</p></div>{% endif %}
 </section>
 
 <section class="grid two">

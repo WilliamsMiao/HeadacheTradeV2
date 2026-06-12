@@ -74,8 +74,8 @@
         <span>{{ item.price_gate_status }}</span><span>{{ item.validation_status }}</span>
         <span>规则审批：{{ item.rules_approval_status|label }}</span><span>资金：{{ item.capital_status|label }}</span>
       </div>
-      {% if item.block_reason %}<p class="block-reason-line"><strong>当前阻塞：</strong>{{ item.block_reason }}</p>{% endif %}
-      {% if item.summary_checks %}<ul class="summary-checks">{% for label, passed, detail in item.summary_checks %}<li><strong>{{ label }}</strong><span>{{ "未通过" if passed is sameas false else "尚未校验" }} · {{ detail }}</span></li>{% endfor %}</ul>{% endif %}
+      {% if item.block_reason %}<p class="block-reason-line"><strong>目前没有入场的主要原因：</strong>{{ item.block_reason }}</p>{% endif %}
+      {% if item.summary_checks %}<ul class="summary-checks">{% for check in item.summary_checks %}<li><strong>{{ check.label }}</strong><span>{{ check.result }} · {{ check.detail }}</span></li>{% endfor %}</ul>{% endif %}
       <a class="text-link" href="/trade-plans#plan-{{ plan.id }}">查看完整交易计划</a>
     </article>
     {% else %}

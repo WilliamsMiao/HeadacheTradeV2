@@ -16,14 +16,14 @@ def describe_trade_plan_next_action(plan: TradePlan) -> str:
     capital_status = getattr(plan, "capital_status", "")
     capital_reason = getattr(plan, "capital_reason", "")
     if price_ready and rules_reject_reason:
-        return f"价格条件已满足，但规则审批未通过：{rules_reject_reason}"
+        return f"价格已经合适，但系统暂不允许入场：{rules_reject_reason}"
     if price_ready and (capital_status == "CAPITAL_UNKNOWN" or capital_reason):
         reason = capital_reason or "无法确认模拟账户资金、持仓和未成交订单"
-        return f"资金状态未知，禁止下单：{reason}"
+        return f"价格已经合适，但暂时无法确认账户是否有足够资金，因此不会提交订单。{reason}"
     if price_ready and plan.status != "TRIGGERED":
-        return "价格条件满足，但计划尚未完成实时校验；价格已到，等待 sim loop 推进为 TRIGGERED。"
+        return "价格已经进入允许入场的区间，系统正在等待最新行情完成实时确认。"
     if price_ready:
-        return "价格条件已满足，等待规则审批和资金校验。"
+        return "价格已经进入计划区间，正在检查风险条件和可用资金。"
     if plan.status in {"ACTIVE", "PLANNED", "ARMED"} and breakout_entry_price:
         chase = f"，且不得高于 {no_chase_above:.2f}" if no_chase_above else ""
         return f"等待价格突破 {breakout_entry_price:.2f}{chase}。"
@@ -32,7 +32,7 @@ def describe_trade_plan_next_action(plan: TradePlan) -> str:
     if plan.status in {"WAITLIST", "MISSED_BY_CAPITAL"}:
         return "资金释放后重新实时校验，不会直接下单。"
     if plan.status == "TRIGGERED":
-        return "正在执行规则审批，通过后提交 Futu 模拟限价单。"
+        return "价格已经进入计划区间，正在检查风险条件和可用资金；全部满足后提交模拟限价单。"
     if plan.status == "ORDER_SUBMITTED":
         return "等待模拟订单成交；超过等待时间将自动撤单。"
     return status_for(plan.status).next_action
