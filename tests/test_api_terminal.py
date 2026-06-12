@@ -16,7 +16,9 @@ from app.services.terminal_api import (
     kline_payload,
     orders_payload,
     positions_payload,
+    structures_payload,
     terminal_summary,
+    trade_plan_overlay_payload,
     trade_plan_detail,
     trade_plan_list,
 )
@@ -230,3 +232,54 @@ def test_kline_payload_is_empty_safe_and_rejects_unsupported_timeframe(session):
         assert "仅支持 60m 和 1d" in str(exc)
     else:
         raise AssertionError("unsupported timeframe must be rejected")
+
+
+def test_trade_plan_overlay_contains_plan_prices_without_formatting(session):
+    plan = _plan()
+    session.add(plan)
+    session.commit()
+
+    payload = trade_plan_overlay_payload(session, "us.aapl", plan.id)
+
+    assert payload["plan_id"] == plan.id
+    assert {line["type"] for line in payload["lines"]} == {
+        "ENTRY", "NO_CHASE", "STOP", "TARGET_1", "TARGET_2", "CURRENT",
+    }
+    assert next(line for line in payload["lines"] if line["type"] == "ENTRY")["price"] == 180
+
+
+def test_structures_payload_links_battle_item_and_trade_plan(session):
+    event = StructureEvent(
+        symbol="US.AAPL",
+        timeframe="60m",
+        event_type="BOTTOM_STRUCTURE",
+        event_ts=datetime(2026, 6, 12, 14, 30),
+        price=180,
+        reason="底结构确认。",
+    )
+    session.add(event)
+    session.flush()
+    battle = BattlePoolItem(
+        symbol="US.AAPL",
+        direction="LONG",
+        priority_level="S",
+        source_structure_id=event.id,
+        daily_state="DAILY_STRONG_BULL",
+        structure_type="BOTTOM_STRUCTURE",
+        score=92,
+        reason="结构清晰。",
+        status="ACTIVE",
+    )
+    session.add(battle)
+    session.flush()
+    plan = _plan()
+    plan.source_structure_id = event.id
+    plan.battle_pool_id = battle.id
+    session.add(plan)
+    session.commit()
+
+    payload = structures_payload(session, "US.AAPL", "60m")
+
+    assert payload[0]["display_name"] == "底结构"
+    assert payload[0]["linked_battle_item_id"] == battle.id
+    assert payload[0]["linked_trade_plan_id"] == plan.id

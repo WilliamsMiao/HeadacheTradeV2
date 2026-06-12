@@ -231,6 +231,70 @@ def kline_payload(session: Session, symbol: str, timeframe: str, limit: int = 30
     }
 
 
+def trade_plan_overlay_payload(session: Session, symbol: str, plan_id: int | None = None) -> dict:
+    normalized_symbol = symbol.strip().upper()
+    query = select(TradePlan).where(TradePlan.symbol == normalized_symbol)
+    if plan_id is not None:
+        query = query.where(TradePlan.id == plan_id)
+    else:
+        query = query.where(TradePlan.status.in_(ACTIVE_PLAN_STATUSES))
+    plan = session.scalar(query.order_by(TradePlan.updated_at.desc(), TradePlan.id.desc()).limit(1))
+    if plan is None:
+        return {"symbol": normalized_symbol, "plan_id": None, "lines": []}
+    raw_lines = [
+        ("ENTRY", "计划入场价", plan.breakout_entry_price),
+        ("NO_CHASE", "最高可接受价", plan.no_chase_above),
+        ("STOP", "硬止损价", plan.stop_price),
+        ("TARGET_1", "第一目标价", plan.target_1),
+        ("TARGET_2", "第二目标价", plan.target_2),
+        ("CURRENT", "当前价", plan.current_price),
+    ]
+    return {
+        "symbol": normalized_symbol,
+        "plan_id": plan.id,
+        "lines": [
+            {"type": line_type, "label": label, "price": float(price)}
+            for line_type, label, price in raw_lines
+            if price is not None
+        ],
+    }
+
+
+def structures_payload(session: Session, symbol: str, timeframe: str = "60m", limit: int = 100) -> list[dict]:
+    normalized_symbol = symbol.strip().upper()
+    normalized_timeframe = timeframe.strip().lower()
+    if normalized_timeframe not in TERMINAL_KLINE_TIMEFRAMES:
+        raise ValueError("当前终端仅支持 60m 和 1d 结构查询")
+    events = list(
+        session.scalars(
+            select(StructureEvent)
+            .where(
+                StructureEvent.symbol == normalized_symbol,
+                StructureEvent.timeframe == normalized_timeframe,
+            )
+            .order_by(StructureEvent.event_ts.desc())
+            .limit(max(1, min(limit, 300)))
+        )
+    )
+    events.reverse()
+    output = []
+    for event in events:
+        battle = session.scalar(select(BattlePoolItem).where(BattlePoolItem.source_structure_id == event.id))
+        plan = session.scalar(
+            select(TradePlan)
+            .where(TradePlan.source_structure_id == event.id)
+            .order_by(TradePlan.updated_at.desc())
+            .limit(1)
+        )
+        payload = _structure_payload(event)
+        payload.update({
+            "linked_battle_item_id": battle.id if battle else None,
+            "linked_trade_plan_id": plan.id if plan else None,
+        })
+        output.append(payload)
+    return output
+
+
 def response_envelope(data, *, source: str, synced_at=None) -> dict:
     return {
         "data": data,

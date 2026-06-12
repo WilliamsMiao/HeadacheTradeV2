@@ -3,17 +3,41 @@ import {
   CandlestickSeries,
   ColorType,
   createChart,
+  createSeriesMarkers,
   HistogramSeries,
+  LineStyle,
   type UTCTimestamp,
 } from 'lightweight-charts';
 
-import type { KlineBar } from '../../types/api';
+import type {
+  KlineBar,
+  StructureMarker,
+  TradePlanOverlayLine,
+} from '../../types/api';
 
 interface KlineChartProps {
   bars: KlineBar[];
+  overlayLines: TradePlanOverlayLine[];
+  structures: StructureMarker[];
 }
 
-export function KlineChart({ bars }: KlineChartProps) {
+const lineVisuals = {
+  ENTRY: { color: '#2563eb', style: LineStyle.Solid },
+  NO_CHASE: { color: '#f97316', style: LineStyle.Dashed },
+  STOP: { color: '#ef4444', style: LineStyle.Solid },
+  TARGET_1: { color: '#22c55e', style: LineStyle.Dashed },
+  TARGET_2: { color: '#16a34a', style: LineStyle.Dashed },
+  CURRENT: { color: '#737373', style: LineStyle.Dotted },
+} as const;
+
+function markerVisual(eventType: string) {
+  if (eventType.startsWith('BOTTOM')) {
+    return { position: 'belowBar' as const, shape: 'arrowUp' as const, color: '#16a34a' };
+  }
+  return { position: 'aboveBar' as const, shape: 'arrowDown' as const, color: '#dc2626' };
+}
+
+export function KlineChart({ bars, overlayLines, structures }: KlineChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -66,6 +90,34 @@ export function KlineChart({ bars }: KlineChartProps) {
         close: bar.close,
       })),
     );
+    overlayLines.forEach((line) => {
+      const visual = lineVisuals[line.type];
+      candles.createPriceLine({
+        price: line.price,
+        title: line.label,
+        color: visual.color,
+        lineStyle: visual.style,
+        lineWidth: line.type === 'STOP' ? 2 : 1,
+        axisLabelVisible: true,
+      });
+    });
+    const firstTime = bars[0].time;
+    const lastTime = bars[bars.length - 1].time;
+    createSeriesMarkers(
+      candles,
+      structures
+        .map((structure) => ({
+          structure,
+          time: Math.floor(new Date(structure.event_ts).getTime() / 1000),
+        }))
+        .filter(({ time }) => time >= firstTime && time <= lastTime)
+        .map(({ structure, time }) => ({
+          ...markerVisual(structure.event_type),
+          time: time as UTCTimestamp,
+          text: structure.display_name,
+          id: String(structure.id),
+        })),
+    );
     const volume = chart.addSeries(HistogramSeries, {
       priceFormat: { type: 'volume' },
       priceScaleId: 'volume',
@@ -83,7 +135,7 @@ export function KlineChart({ bars }: KlineChartProps) {
     chart.timeScale().fitContent();
 
     return () => chart.remove();
-  }, [bars]);
+  }, [bars, overlayLines, structures]);
 
   return <div className="kline-chart" ref={containerRef} role="img" aria-label="K 线与成交量图" />;
 }

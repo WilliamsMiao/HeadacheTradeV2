@@ -4,6 +4,16 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   base: '/terminal/',
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-ui': ['react', 'react-dom', 'antd', '@ant-design/icons'],
+          'vendor-state': ['@tanstack/react-query', 'zustand'],
+        },
+      },
+    },
+  },
   server: {
     port: 5173,
     proxy: {
