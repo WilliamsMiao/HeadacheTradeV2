@@ -1,0 +1,22 @@
+{% macro status_badge(text, severity="neutral") -%}
+<span class="status-badge status-{{ severity }}">{{ text }}</span>
+{%- endmacro %}
+
+{% macro reason_alert(title, reason, severity="warning") -%}
+<div class="reason-alert reason-{{ severity }}">
+  <strong>{{ title }}</strong>
+  <p>{{ reason }}</p>
+</div>
+{%- endmacro %}
+
+{% macro diagnostic_checklist(checks, compact=false) -%}
+<ul class="diagnostic-checklist {{ 'is-compact' if compact else '' }}">
+  {% for check in checks %}
+  <li class="{{ 'passed' if check.passed is sameas true else 'failed' if check.passed is sameas false else 'unknown' }}">
+    <span class="diagnostic-icon" aria-hidden="true">{{ "✓" if check.passed is sameas true else "×" if check.passed is sameas false else "·" }}</span>
+    <span><strong>{{ check.label }}</strong><small>{{ check.detail }}</small></span>
+    <b>{{ check.result }}</b>
+  </li>
+  {% endfor %}
+</ul>
+{%- endmacro %}
