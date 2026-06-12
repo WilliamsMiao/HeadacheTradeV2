@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
@@ -83,6 +83,14 @@ from app.services.view_models import (
     structure_view_models,
     trade_plan_groups,
 )
+from app.services.terminal_api import (
+    orders_payload,
+    positions_payload,
+    response_envelope,
+    terminal_summary,
+    trade_plan_detail,
+    trade_plan_list,
+)
 from app.presentation import (
     describe_market_state,
     describe_market_reason,
@@ -101,6 +109,7 @@ from app.presentation import (
 )
 
 BASE_DIR = Path(__file__).resolve().parent
+TERMINAL_DIST_DIR = BASE_DIR.parent / "frontend" / "dist"
 STATIC_VERSION = str(
     max((BASE_DIR / "static" / "styles.css").stat().st_mtime_ns, (BASE_DIR / "static" / "app.js").stat().st_mtime_ns)
 )
@@ -123,6 +132,11 @@ templates.env.filters["json_list"] = json_list
 
 app = FastAPI(title="HeadacheTradeV2", version="0.1.0")
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+app.mount(
+    "/terminal/assets",
+    StaticFiles(directory=str(TERMINAL_DIST_DIR / "assets"), check_dir=False),
+    name="terminal-assets",
+)
 
 
 class RiskConfigUpdate(BaseModel):
@@ -316,6 +330,38 @@ def trade_plans_page(request: Request, session: Session = Depends(get_session)):
     )
 
 
+@app.get("/api/terminal/summary")
+def terminal_summary_api(session: Session = Depends(get_session)):
+    summary = terminal_summary(session, get_settings())
+    return response_envelope(
+        summary,
+        source=summary["account_equity_source"],
+        synced_at=summary["account_equity_synced_at"],
+    )
+
+
+@app.get("/api/trade-plans")
+def trade_plans_api(
+    status: str = "",
+    symbol: str = "",
+    priority: str = "",
+    direction: str = "",
+    active_only: bool = True,
+    session: Session = Depends(get_session),
+):
+    plans = trade_plan_list(
+        session,
+        get_settings(),
+        status=status,
+        symbol=symbol,
+        priority=priority,
+        direction=direction,
+        active_only=active_only,
+    )
+    synced_at = max((plan["updated_at"] for plan in plans if plan["updated_at"]), default=None)
+    return response_envelope(plans, source="HEADACHE_TRADE_DB", synced_at=synced_at)
+
+
 @app.get("/api/trade-plans/prices")
 def trade_plan_prices_api(session: Session = Depends(get_session)):
     provider = FutuProvider(get_settings())
@@ -325,6 +371,29 @@ def trade_plan_prices_api(session: Session = Depends(get_session)):
         raise HTTPException(status_code=503, detail=f"OpenD 实时行情暂不可用：{exc}") from exc
     finally:
         provider.close()
+
+
+@app.get("/api/trade-plans/{plan_id}")
+def trade_plan_detail_api(plan_id: int, session: Session = Depends(get_session)):
+    plan = session.get(TradePlan, plan_id)
+    if plan is None:
+        raise HTTPException(status_code=404, detail="交易计划不存在")
+    detail = trade_plan_detail(session, plan, get_settings())
+    return response_envelope(detail, source="HEADACHE_TRADE_DB", synced_at=plan.updated_at)
+
+
+@app.get("/api/positions")
+def positions_api(symbol: str = "", session: Session = Depends(get_session)):
+    positions = positions_payload(session, symbol)
+    synced_at = max((position["updated_at"] for position in positions if position["updated_at"]), default=None)
+    return response_envelope(positions, source="FUTU_SIM_ACCOUNT", synced_at=synced_at)
+
+
+@app.get("/api/sim-orders")
+def sim_orders_api(symbol: str = "", session: Session = Depends(get_session)):
+    orders = orders_payload(session, symbol)
+    synced_at = max((order["submitted_at"] for order in orders if order["submitted_at"]), default=None)
+    return response_envelope(orders, source="FUTU_SIM_ACCOUNT", synced_at=synced_at)
 
 
 @app.get("/sim-orders", response_class=HTMLResponse)
@@ -604,6 +673,15 @@ def _run_background_task(task_name: str, settings, mock: bool, progress):
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/terminal", response_class=HTMLResponse)
+@app.get("/terminal/{path:path}", response_class=HTMLResponse)
+def terminal_app(path: str = ""):
+    index_file = TERMINAL_DIST_DIR / "index.html"
+    if not index_file.is_file():
+        raise HTTPException(status_code=503, detail="Terminal 前端尚未构建")
+    return FileResponse(index_file)
 
 
 @app.get("/api/opend/health")
