@@ -5,6 +5,7 @@ from app.config import Settings
 from app.models import (
     BattlePoolItem,
     CandidateStock,
+    KLine,
     Position,
     SimOrder,
     StructureEvent,
@@ -12,6 +13,7 @@ from app.models import (
     TradePlan,
 )
 from app.services.terminal_api import (
+    kline_payload,
     orders_payload,
     positions_payload,
     terminal_summary,
@@ -174,3 +176,57 @@ def test_terminal_api_exposes_no_real_trade_mutation_route():
     }
 
     assert all((path, "POST") not in registered for path in unsafe_paths)
+
+
+def test_kline_payload_returns_chronological_valid_bars(session):
+    session.add_all([
+        KLine(
+            symbol="US.AAPL",
+            timeframe="60m",
+            ts=datetime(2026, 6, 12, 14, 30),
+            open=180,
+            high=182,
+            low=179,
+            close=181,
+            volume=1000,
+        ),
+        KLine(
+            symbol="US.AAPL",
+            timeframe="60m",
+            ts=datetime(2026, 6, 12, 15, 30),
+            open=181,
+            high=183,
+            low=180,
+            close=182,
+            volume=0,
+            data_ok=False,
+            anomaly_reason="zero volume",
+        ),
+        KLine(
+            symbol="US.AAPL",
+            timeframe="60m",
+            ts=datetime(2026, 6, 12, 16, 30),
+            open=182,
+            high=184,
+            low=181,
+            close=183,
+            volume=1200,
+        ),
+    ])
+    session.commit()
+
+    payload = kline_payload(session, "us.aapl", "60M", limit=300)
+
+    assert [bar["close"] for bar in payload["bars"]] == [181, 183]
+    assert payload["bars"][0]["time"] < payload["bars"][1]["time"]
+    assert payload["anomaly_count"] == 1
+
+
+def test_kline_payload_is_empty_safe_and_rejects_unsupported_timeframe(session):
+    assert kline_payload(session, "US.AAPL", "1d")["bars"] == []
+    try:
+        kline_payload(session, "US.AAPL", "5m")
+    except ValueError as exc:
+        assert "仅支持 60m 和 1d" in str(exc)
+    else:
+        raise AssertionError("unsupported timeframe must be rejected")

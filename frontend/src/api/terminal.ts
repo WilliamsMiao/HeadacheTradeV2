@@ -1,5 +1,12 @@
 import { apiGet } from './client';
-import type { Position, SimOrder, TerminalSummary, TradePlan, TradePlanDetail } from '../types/api';
+import type {
+  KlineBar,
+  Position,
+  SimOrder,
+  TerminalSummary,
+  TradePlan,
+  TradePlanDetail,
+} from '../types/api';
 
 export const getTerminalSummary = () => apiGet<TerminalSummary>('/api/terminal/summary');
 
@@ -12,3 +19,8 @@ export const getTradePlanDetail = (id: number) =>
 export const getPositions = () => apiGet<Position[]>('/api/positions');
 
 export const getOrders = () => apiGet<SimOrder[]>('/api/sim-orders');
+
+export const getKlines = (symbol: string, timeframe: '60m' | '1d', limit = 300) =>
+  apiGet<KlineBar[]>(
+    `/api/kline?symbol=${encodeURIComponent(symbol)}&timeframe=${timeframe}&limit=${limit}`,
+  );
