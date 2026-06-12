@@ -1,9 +1,11 @@
 {% extends "base.html" %}
+{% from "_freshness.html" import freshness_bar %}
 {% block content %}
 <header class="page-header compact">
   <div><h1>结构事件</h1><p>60 分钟结构只描述市场行为，不直接产生买入、卖出或清仓动作。</p></div>
   <div class="header-actions"><button data-task="run-pipeline" data-loading-text="正在扫描">重新扫描结构</button></div>
 </header>
+{{ freshness_bar(freshness, "60 分钟结构事件") }}
 <section class="panel">
   <div class="panel-head">
     <div class="panel-head-copy">

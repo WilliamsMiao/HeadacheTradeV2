@@ -323,6 +323,17 @@ def test_simulation_pages_render_and_require_auth():
         response = client.get(path)
         assert response.status_code == 200
         assert heading in response.text
+        assert "最近刷新（香港时间）" in response.text
+        assert "下次计划刷新（香港时间）" in response.text
+
+
+def test_core_monitoring_pages_show_freshness_guidance():
+    client = authenticated_client()
+    for path in ("/", "/candidates", "/structures", "/battle-pool", "/trade-plans", "/market", "/opend"):
+        response = client.get(path)
+        assert response.status_code == 200
+        assert "最近刷新（香港时间）" in response.text
+        assert "下次计划刷新（香港时间）" in response.text
 
 
 def test_journal_excludes_plans_without_fills():

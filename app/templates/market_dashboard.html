@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_freshness.html" import freshness_bar %}
 {% block content %}
 <header class="page-header">
   <div><h1>市场风向标</h1><p>市场环境用于提示仓位和节奏，不阻断候选池、结构扫描、重点作战池或交易计划生成。</p></div>
@@ -7,6 +8,7 @@
     <small>{{ market.state|market_desc if market else "运行扫描后生成" }}</small>
   </section>
 </header>
+{{ freshness_bar(freshness, "市场风向标") }}
 <section class="panel">
   <div class="panel-head"><div class="panel-head-copy"><h2>基准拆解</h2><span>当前版本基于 SPY 与 QQQ，后续可扩展 VIX 与半导体指数</span></div></div>
   <div class="market-check-grid market-page-grid">

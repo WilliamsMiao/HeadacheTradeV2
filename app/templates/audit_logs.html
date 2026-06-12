@@ -1,9 +1,11 @@
 {% extends "base.html" %}
+{% from "_freshness.html" import freshness_bar %}
 {% block content %}
 <header class="page-header compact">
   <div><h1>系统审计</h1><p>面向排障的原始系统动作记录；交易员复盘请使用“交易复盘”。</p></div>
   <div class="header-actions"><a class="button-secondary" href="/journal">返回交易复盘</a></div>
 </header>
+{{ freshness_bar(freshness, "系统审计") }}
 <section class="panel journal-panel">
   <div class="panel-head"><div class="panel-head-copy"><h2>最近系统动作</h2><span>实时校验、审批、同步、订单和异常均按时间保留</span></div><small>{{ logs|length }} 条</small></div>
   <ol class="action-timeline journal-timeline">

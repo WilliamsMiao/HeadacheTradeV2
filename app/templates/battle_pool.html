@@ -1,9 +1,11 @@
 {% extends "base.html" %}
+{% from "_freshness.html" import freshness_bar %}
 {% block content %}
 <header class="page-header compact">
   <div><h1>结构作战池</h1><p>作战池来自已经出现 60 分钟结构的候选股。S/A/B/C 是结构作战优先级，不等于立即下单。</p></div>
   <div class="header-actions"><a class="button-secondary" href="/trade-plans">查看执行计划</a></div>
 </header>
+{{ freshness_bar(freshness, "结构作战池") }}
 <section class="panel">
   <div class="panel-head"><div class="panel-head-copy"><h2>作战评级</h2><span>只有 S/A 且通过实时校验、规则审批和资金闸门，才允许模拟交易</span></div><small>{{ items|length }} 支</small></div>
   <div class="battle-list">

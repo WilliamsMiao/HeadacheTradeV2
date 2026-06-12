@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_freshness.html" import freshness_bar %}
 {% block content %}
 <header class="page-header compact">
   <div>
@@ -11,6 +12,7 @@
     <small>{{ status.socket_health.host }}:{{ status.socket_health.port }} · 端口连接不等于 Futu 已登录</small>
   </section>
 </header>
+{{ freshness_bar(freshness, "模拟账户同步") }}
 
 <section class="summary-grid">
   <article class="summary-card">

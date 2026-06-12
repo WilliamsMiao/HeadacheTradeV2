@@ -1432,6 +1432,45 @@ td a + small {
   font-size: 18px;
 }
 
+.freshness-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin: 0 0 var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-success);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-subtle);
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+.freshness-bar.is-stale {
+  border-left-color: var(--color-warning);
+}
+
+.freshness-bar strong {
+  color: var(--color-text-primary);
+}
+
+.freshness-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.freshness-grid .freshness-bar {
+  align-content: start;
+  align-items: flex-start;
+  flex-direction: column;
+}
+
+.command-freshness {
+  margin-bottom: var(--space-5);
+}
+
 .blocked-list {
   display: grid;
   border: 1px solid var(--color-border);
@@ -2417,6 +2456,16 @@ select:focus-visible {
 
   .market-check-grid {
     grid-template-columns: 1fr;
+  }
+
+  .freshness-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .freshness-bar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--space-1);
   }
 
   .market-detail-panel > summary {
