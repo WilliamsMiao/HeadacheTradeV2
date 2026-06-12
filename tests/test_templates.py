@@ -9,6 +9,8 @@ from app.models import (
     BattlePoolItem,
     CandidateStock,
     MarketState,
+    Position,
+    SimOrder,
     StructureEvent,
     SystemConfig,
     TradePlan,
@@ -321,3 +323,25 @@ def test_simulation_pages_render_and_require_auth():
         response = client.get(path)
         assert response.status_code == 200
         assert heading in response.text
+
+
+def test_journal_excludes_plans_without_fills():
+    client = authenticated_client()
+    with SessionLocal() as session:
+        session.execute(delete(Position))
+        session.execute(delete(SimOrder))
+        session.execute(delete(TradePlan))
+        session.add(TradePlan(
+            symbol="US.NO_FILL", name="No Fill", direction="LONG", source_structure_id=1,
+            battle_pool_id=1, structure_type="BOTTOM_STRUCTURE", priority_level="A",
+            stop_price=90, target_1=110, target_2=120, trailing_rule="test",
+            time_stop_rule="test", invalid_condition="test", risk_reward_1=1.5,
+            risk_reward_2=2, status="ACTIVE", reason="test",
+        ))
+        session.commit()
+
+    response = client.get("/journal")
+
+    assert response.status_code == 200
+    assert "US.NO_FILL" not in response.text
+    assert "暂无已成交交易" in response.text

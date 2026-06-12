@@ -117,7 +117,24 @@ def structure_view_models(session: Session, events: list[StructureEvent]) -> lis
 
 
 def journal_view_models(session: Session) -> list[dict]:
-    plans = list(session.scalars(select(TradePlan).order_by(TradePlan.updated_at.desc()).limit(100)))
+    plans = list(
+        session.scalars(
+            select(TradePlan)
+            .where(
+                (TradePlan.id.in_(select(Position.source_trade_plan_id).where(Position.source_trade_plan_id.is_not(None))))
+                | (
+                    TradePlan.id.in_(
+                        select(SimOrder.trade_plan_id).where(
+                            SimOrder.trade_plan_id.is_not(None),
+                            (SimOrder.dealt_qty > 0) | SimOrder.status.in_({"FILLED", "PARTIALLY_FILLED"}),
+                        )
+                    )
+                )
+            )
+            .order_by(TradePlan.updated_at.desc())
+            .limit(100)
+        )
+    )
     output = []
     for plan in plans:
         orders = list(
