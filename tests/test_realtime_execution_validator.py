@@ -3,7 +3,7 @@ from datetime import datetime
 from sqlalchemy import select
 
 from app.config import Settings
-from app.models import MarketState, TradePlan
+from app.models import Indicator, MarketState, TradePlan
 from app.services.realtime_execution_validator import validate_active_trade_plans
 
 
@@ -52,6 +52,32 @@ def test_plan_becomes_triggered_only_inside_no_chase_range(session):
     session.commit()
     validate_active_trade_plans(session, QuoteProvider(101), Settings())
     assert record.status == "TRIGGERED"
+
+
+def test_validation_context_distinguishes_missing_and_failed_checks(session):
+    record = plan()
+    session.add(record)
+    session.add(MarketState(as_of=datetime.utcnow().date(), state="RISK_ON", reason="ok"))
+    session.commit()
+
+    result = validate_active_trade_plans(session, QuoteProvider(101), Settings())
+    context = result["contexts"][record.id]
+
+    assert context["spread_available"] is True
+    assert context["volume_available"] is True
+    assert context["short_trend_ok"] is None
+    assert context["market_state_available"] is True
+
+
+def test_short_trend_uses_latest_60m_ma20(session):
+    record = plan()
+    session.add(record)
+    session.add(Indicator(symbol="AAPL", timeframe="60m", ts=datetime.utcnow(), ma20=99))
+    session.commit()
+
+    result = validate_active_trade_plans(session, QuoteProvider(101), Settings())
+
+    assert result["contexts"][record.id]["short_trend_ok"] is True
 
 
 def test_plan_is_no_chase_or_invalidated(session):
