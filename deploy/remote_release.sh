@@ -112,6 +112,11 @@ if grep -Eq '^ENABLE_SIM_TRADING=(true|1|yes)$' "${ENV_DIR}/headachetrade.env"; 
 else
   systemctl disable --now headachetrade-sim-loop.timer || true
 fi
+
+if [[ "${INSTALL_FUTU_OPEND:-1}" == "1" ]]; then
+  bash "${RELEASE_DIR}/deploy/install_futu_opend.sh"
+fi
+
 if ! systemctl restart "${SERVICE_NAME}"; then
   if [[ -n "${previous_release}" && -d "${previous_release}" ]]; then
     ln -sfn "${previous_release}" "${CURRENT_LINK}"
@@ -141,7 +146,3 @@ if [[ "${healthy}" != "1" ]]; then
 fi
 
 systemctl status "${SERVICE_NAME}" --no-pager --lines=30
-
-if [[ "${INSTALL_FUTU_OPEND:-1}" == "1" ]]; then
-  bash "${RELEASE_DIR}/deploy/install_futu_opend.sh"
-fi
