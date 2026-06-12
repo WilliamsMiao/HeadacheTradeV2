@@ -37,11 +37,7 @@ def test_opend_status_api_masks_sensitive_workflow(monkeypatch):
             },
         ),
     )
-    monkeypatch.setattr(
-        opend_admin,
-        "opend_socket_health",
-        lambda: {"status": "ok", "host": "127.0.0.1", "port": 11111, "connected": True},
-    )
+    monkeypatch.setattr(opend_admin, "opend_socket_health", lambda: (_ for _ in ()).throw(AssertionError("duplicate probe")))
     client = authenticated_client()
     response = client.get("/api/opend/status")
     assert response.status_code == 200
@@ -49,6 +45,25 @@ def test_opend_status_api_masks_sensitive_workflow(monkeypatch):
     assert payload["credentials_configured"] is True
     assert payload["socket_health"]["connected"] is True
     assert "password" not in response.text.lower()
+
+
+def test_opend_diagnostics_is_loaded_on_demand(monkeypatch):
+    calls = []
+
+    def fake_diagnostics() -> opend_admin.AdminResult:
+        calls.append("diagnostics")
+        return opend_admin.AdminResult(
+            True,
+            "诊断日志已读取",
+            {"api_port_open": True, "recent_log": "bounded diagnostic log"},
+        )
+
+    monkeypatch.setattr(opend_admin, "diagnostics", fake_diagnostics)
+    client = authenticated_client()
+    response = client.get("/api/opend/diagnostics")
+    assert response.status_code == 200
+    assert response.json()["recent_log"] == "bounded diagnostic log"
+    assert calls == ["diagnostics"]
 
 
 def test_opend_verify_code_supports_phone_and_captcha(monkeypatch):

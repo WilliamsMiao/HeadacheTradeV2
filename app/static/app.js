@@ -387,6 +387,21 @@ document.querySelectorAll("[data-opend-refresh]").forEach((button) => {
   });
 });
 
+document.querySelectorAll("[data-opend-diagnostics]").forEach((button) => {
+  button.addEventListener("click", async () => {
+    setButtonLoading(button, true);
+    try {
+      const payload = await getJson("/api/opend/diagnostics");
+      renderOpenDStatus(payload);
+      showToast(payload.message || "诊断日志已读取", payload.ok === false ? "error" : "success");
+    } catch (error) {
+      showToast(error.message, "error");
+    } finally {
+      setButtonLoading(button, false);
+    }
+  });
+});
+
 const openDConfigForm = document.getElementById("opend-config-form");
 if (openDConfigForm) {
   openDConfigForm.addEventListener("submit", async (event) => {
@@ -465,7 +480,7 @@ function renderOpenDStatus(payload) {
       <div><dt>后端连接</dt><dd>${socketConnected ? "已连接" : "未连接"}</dd></div>
       <div><dt>验证码状态</dt><dd>${payload.needs_phone_code ? "需要手机验证码" : (payload.needs_captcha_code ? "需要图形验证码" : "暂无提示")}</dd></div>
     </dl>
-    <pre class="log-box">${escapeHtml(payload.telnet_reply || payload.recent_log || "暂无 OpenD 日志。")}</pre>
+    <pre class="log-box">${escapeHtml(payload.telnet_reply || payload.recent_log || "诊断日志按需读取，避免阻塞页面加载。")}</pre>
   `;
 }
 

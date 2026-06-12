@@ -5,6 +5,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 INSTALL_SCRIPT = Path("/opt/headachetrade/current/deploy/install_futu_opend.sh")
@@ -23,6 +24,7 @@ ALLOWED = {
     "submit-phone-code",
     "submit-captcha-code",
     "verify",
+    "diagnostics",
 }
 
 
@@ -41,8 +43,12 @@ def main() -> int:
         elif action == "status":
             result = status("状态已刷新")
         elif action == "start":
-            run(["systemctl", "start", SERVICE], timeout=30)
-            result = status("OpenD 已启动")
+            if service_state() == "active":
+                result = status("OpenD 已在运行")
+            else:
+                run(["systemctl", "start", SERVICE], timeout=30)
+                wait_for_port(API_PORT, timeout=8)
+                result = status("OpenD 已启动")
         elif action == "stop":
             run(["systemctl", "stop", SERVICE], timeout=30)
             result = status("OpenD 已停止")
@@ -55,6 +61,8 @@ def main() -> int:
             result = submit_code("input_phone_verify_code", payload)
         elif action == "submit-captcha-code":
             result = submit_code("input_pic_verify_code", payload)
+        elif action == "diagnostics":
+            result = diagnostics()
         else:
             result = status("连接已检查")
         emit(**result)
@@ -135,11 +143,8 @@ def status(message: str) -> dict:
 
 
 def status_fields() -> dict:
-    active = run(["systemctl", "is-active", SERVICE], check=False).stdout.strip()
+    active = service_state()
     enabled = run(["systemctl", "is-enabled", SERVICE], check=False).stdout.strip()
-    opend_journal = run(["journalctl", "-u", f"{SERVICE}.service", "--since", "10 minutes ago", "--no-pager"], check=False).stdout
-    app_journal = run(["journalctl", "-u", "headachetrade.service", "--since", "10 minutes ago", "--no-pager"], check=False).stdout
-    combined_journal = opend_journal + "\n" + app_journal
     return {
         "installed": OPEND_BIN.exists(),
         "service_active": active,
@@ -147,10 +152,46 @@ def status_fields() -> dict:
         "api_port_open": port_open(API_PORT),
         "telnet_port_open": port_open(TELNET_PORT),
         "credentials_configured": env_has_value("FUTU_LOGIN_ACCOUNT") and env_has_value("FUTU_LOGIN_PASSWORD"),
-        "needs_phone_code": "需要手机验证码" in combined_journal,
-        "needs_captcha_code": "图形验证码" in combined_journal,
-        "recent_log": tail(clean(combined_journal), 3000),
+        "needs_phone_code": False,
+        "needs_captcha_code": False,
+        "recent_log": "",
     }
+
+
+def diagnostics() -> dict:
+    opend_journal = run(
+        ["journalctl", "-u", f"{SERVICE}.service", "-n", "120", "--no-pager"],
+        timeout=5,
+        check=False,
+    ).stdout
+    app_journal = run(
+        ["journalctl", "-u", "headachetrade.service", "-n", "80", "--no-pager"],
+        timeout=5,
+        check=False,
+    ).stdout
+    combined_journal = opend_journal + "\n" + app_journal
+    fields = status_fields()
+    fields.update(
+        {
+            "needs_phone_code": "需要手机验证码" in combined_journal,
+            "needs_captcha_code": "图形验证码" in combined_journal,
+            "recent_log": tail(clean(combined_journal), 5000),
+        }
+    )
+    return {"ok": True, "message": "诊断日志已读取", **fields}
+
+
+def service_state() -> str:
+    return run(["systemctl", "is-active", SERVICE], check=False).stdout.strip()
+
+
+def wait_for_port(port: int, timeout: float) -> bool:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if port_open(port):
+            return True
+        time.sleep(0.5)
+    return False
 
 
 def telnet_command(command: str) -> str:

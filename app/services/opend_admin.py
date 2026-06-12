@@ -34,6 +34,10 @@ def status() -> AdminResult:
     return _run_admin("status", {})
 
 
+def diagnostics() -> AdminResult:
+    return _run_admin("diagnostics", {})
+
+
 def install() -> AdminResult:
     return _run_admin("install", {})
 
@@ -74,7 +78,7 @@ def _run_admin(action: str, payload: dict[str, Any]) -> AdminResult:
             input=json.dumps(payload),
             text=True,
             capture_output=True,
-            timeout=60 if action != "install" else 600,
+            timeout=600 if action == "install" else (20 if action in {"status", "start", "diagnostics"} else 60),
             check=False,
         )
     except FileNotFoundError:

@@ -221,6 +221,7 @@ def test_trade_plan_page_renders_entry_stop_targets_and_rules():
     client = authenticated_client()
     with SessionLocal() as session:
         session.execute(delete(TradePlan))
+        session.execute(delete(BattlePoolItem).where(BattlePoolItem.symbol == "AAPL"))
         battle = BattlePoolItem(
             symbol="AAPL", direction="LONG", priority_level="S", source_structure_id=12,
             daily_state="DAILY_STRONG_BULL", structure_type="BOTTOM_STRUCTURE",

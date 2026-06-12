@@ -472,6 +472,11 @@ def api_opend_status():
     return _opend_payload(opend_admin.status())
 
 
+@app.get("/api/opend/diagnostics")
+def api_opend_diagnostics():
+    return _opend_payload(opend_admin.diagnostics())
+
+
 @app.post("/api/opend/install")
 def api_opend_install():
     return _opend_payload(opend_admin.install())
@@ -618,7 +623,17 @@ def _workbench_call(function, *args):
 
 def _opend_payload(result: opend_admin.AdminResult) -> dict[str, object]:
     payload = {"ok": result.ok, "message": result.message, **result.data}
-    payload["socket_health"] = opend_admin.opend_socket_health()
+    if "api_port_open" in result.data:
+        settings = get_settings()
+        connected = bool(result.data["api_port_open"])
+        payload["socket_health"] = {
+            "status": "ok" if connected else "error",
+            "host": settings.futu_host,
+            "port": settings.futu_port,
+            "connected": connected,
+        }
+    else:
+        payload["socket_health"] = opend_admin.opend_socket_health()
     return payload
 
 
