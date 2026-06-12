@@ -31,6 +31,9 @@ def rules_approve_trade_plan(
     risk_block = _daily_risk_block(session, settings)
     if risk_block:
         return _reject(session, plan, "REJECTED_BY_RISK", risk_block, realtime_context)
+    spread_available = realtime_context.get("spread_available", "spread_pct" in realtime_context)
+    volume_available = realtime_context.get("volume_available", "volume_ok" in realtime_context)
+    market_state_available = realtime_context.get("market_state_available", "market_state" in realtime_context)
     checks = [
         (settings.enable_sim_trading, "REJECTED_BY_RISK", "模拟交易总开关未开启"),
         (not settings.enable_real_trading, "REJECTED_BY_RISK", "真实交易配置必须关闭"),
@@ -39,9 +42,13 @@ def rules_approve_trade_plan(
         (plan.status == "TRIGGERED", "REJECTED_BY_PRICE", "计划尚未完整触发"),
         (float(realtime_context.get("current_price") or 0) >= float(plan.breakout_entry_price or 0), "REJECTED_BY_PRICE", "尚未达到突破价"),
         (float(realtime_context.get("current_price") or 0) <= float(plan.no_chase_above or 0), "REJECTED_BY_PRICE", "超过禁止追价线"),
+        (spread_available is True, "REJECTED_BY_DATA", "实时买卖价不可用"),
         (float(realtime_context.get("spread_pct") or 0) <= settings.max_spread_pct, "REJECTED_BY_DATA", "买卖价差过大"),
-        (bool(realtime_context.get("volume_ok")), "REJECTED_BY_DATA", "实时成交量异常"),
-        (bool(realtime_context.get("short_trend_ok", True)), "REJECTED_BY_PRICE", "短周期趋势已破坏"),
+        (volume_available is True, "REJECTED_BY_DATA", "实时成交量不可用"),
+        (realtime_context.get("volume_ok") is True, "REJECTED_BY_DATA", "实时成交量异常"),
+        (realtime_context.get("short_trend_ok") is not None, "REJECTED_BY_DATA", "短周期趋势尚未完成校验"),
+        (realtime_context.get("short_trend_ok") is True, "REJECTED_BY_PRICE", "短周期趋势已破坏"),
+        (market_state_available is True, "REJECTED_BY_DATA", "市场状态尚未完成校验"),
         (realtime_context.get("market_state") != "RISK_OFF", "REJECTED_BY_MARKET", "市场处于风险关闭状态"),
         (_entry_time_allowed(settings), "REJECTED_BY_RISK", "当前处于禁止新开仓时间"),
     ]

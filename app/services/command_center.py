@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -78,28 +78,30 @@ def _plan_view(session: Session, plan: TradePlan, settings: Settings) -> dict:
         SimOrder.status.in_({"SUBMITTED", "PARTIALLY_FILLED"}),
     )))
     sync = portfolio_sync_status(session)
-    capital_ok = plan.capital_status == "CAPITAL_AVAILABLE" and sync.get("ok", False)
+    capital_ok = sync.get("ok", False) and sync.get("status") == "CAPITAL_AVAILABLE"
     checks = [
-        ("当前价 >= 入场价", entry_ok),
-        ("当前价 <= 禁止追价", chase_ok),
-        ("计划状态 == TRIGGERED", plan.status == "TRIGGERED"),
-        ("模拟交易开启", settings.enable_sim_trading),
-        ("真实交易关闭", not settings.enable_real_trading),
-        ("价差正常", validation.get("spread_pct") is not None and validation.get("spread_pct", 1) <= settings.max_spread_pct),
-        ("成交量正常", validation.get("volume_ok") is True),
-        ("短周期趋势未破坏", validation.get("short_trend_ok") is True),
-        ("大盘不是 RISK_OFF", validation.get("market_state") not in {None, "RISK_OFF"}),
-        ("当前时间允许开仓", _entry_time_allowed(settings)),
-        ("资金可用", capital_ok),
-        ("无同标的持仓", not has_position),
-        ("无同标的未成交订单", not has_order),
+        ("当前价 >= 入场价", entry_ok, f"{current:.2f} / {entry:.2f}" if current and entry else "价格数据缺失"),
+        ("当前价 <= 禁止追价", chase_ok, f"{current:.2f} / {no_chase:.2f}" if current and no_chase else "禁止追价线未设置"),
+        ("计划状态 == TRIGGERED", plan.status == "TRIGGERED", f"当前状态：{plan.status}"),
+        ("模拟交易开启", settings.enable_sim_trading, "系统配置"),
+        ("真实交易关闭", not settings.enable_real_trading, "系统配置"),
+        ("价差正常", _validation_check(validation, "spread_available", validation.get("spread_pct") is not None and validation.get("spread_pct", 1) <= settings.max_spread_pct), _spread_detail(validation, settings)),
+        ("成交量正常", _validation_check(validation, "volume_available", validation.get("volume_ok") is True), _volume_detail(validation)),
+        ("短周期趋势未破坏", _validation_value(validation, "short_trend_ok"), validation.get("short_trend_reason") or "等待 60 分钟指标"),
+        ("大盘不是 RISK_OFF", _market_check(validation), f"最近校验：{validation.get('market_state') or '未知'}"),
+        ("当前时间允许开仓", _entry_time_allowed(settings), "按美东交易时段"),
+        ("资金可用", capital_ok, sync.get("reason") or sync.get("error") or "等待模拟账户同步"),
+        ("无同标的持仓", not has_position, "本地模拟持仓"),
+        ("无同标的未成交订单", not has_order, "本地模拟订单"),
     ]
     price_ready = entry_ok and chase_ok
     block_reason = (
         plan.rules_reject_reason
         or plan.capital_reason
         or (sync.get("error") or sync.get("reason") if not sync.get("ok") else "")
-        or ("" if all(passed for _, passed in checks) else next(label for label, passed in checks if not passed))
+        or ("" if all(passed is True for _, passed, _ in checks) else next(
+            f"{label}：{detail}" for label, passed, detail in checks if passed is not True
+        ))
     )
     return {
         "record": plan,
@@ -133,6 +135,45 @@ def _latest_validation(session: Session, plan: TradePlan) -> dict:
     if not log:
         return {}
     try:
-        return json.loads(log.payload_json or "{}")
+        payload = json.loads(log.payload_json or "{}")
+        payload["_is_fresh"] = (datetime.now(UTC).replace(tzinfo=None) - log.created_at).total_seconds() <= 120
+        return payload
     except json.JSONDecodeError:
         return {}
+
+
+def _validation_check(validation: dict, availability_key: str, result: bool) -> bool | None:
+    if not validation or not validation.get("_is_fresh"):
+        return None
+    if validation.get(availability_key) is not True:
+        return None
+    return result
+
+
+def _validation_value(validation: dict, key: str) -> bool | None:
+    if not validation or not validation.get("_is_fresh"):
+        return None
+    value = validation.get(key)
+    return value if isinstance(value, bool) else None
+
+
+def _market_check(validation: dict) -> bool | None:
+    if not validation or not validation.get("_is_fresh") or validation.get("market_state_available") is not True:
+        return None
+    return validation.get("market_state") != "RISK_OFF"
+
+
+def _spread_detail(validation: dict, settings: Settings) -> str:
+    if not validation or not validation.get("_is_fresh"):
+        return "最近 120 秒内没有实时校验"
+    if validation.get("spread_available") is not True:
+        return "OpenD 未返回有效买一/卖一"
+    return f"{float(validation.get('spread_pct') or 0):.3%}，上限 {settings.max_spread_pct:.3%}"
+
+
+def _volume_detail(validation: dict) -> str:
+    if not validation or not validation.get("_is_fresh"):
+        return "最近 120 秒内没有实时校验"
+    if validation.get("volume_available") is not True:
+        return "OpenD 未返回有效成交量"
+    return f"实时快照成交量 {float(validation.get('volume') or 0):,.0f}"

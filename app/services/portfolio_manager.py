@@ -23,23 +23,28 @@ def get_portfolio_state(session: Session, trade_provider, settings: Settings) ->
         account = trade_provider.get_account_info() if trade_provider else {}
         remote_positions = trade_provider.get_positions() if trade_provider else []
         remote_orders = trade_provider.get_open_orders() if trade_provider else []
+        remote_position_count = sum(_position_is_open(row) for row in remote_positions)
+        remote_order_count = sum(_order_is_open(row) for row in remote_orders)
         available_cash = float(account.get("cash") or account.get("power") or 0)
         positions = list(session.scalars(select(Position).where(Position.status == "OPEN")))
         orders = list(session.scalars(select(SimOrder).where(SimOrder.status.in_({"SUBMITTED", "PARTIALLY_FILLED"}))))
-        if len(positions) >= settings.max_positions:
+        open_positions = max(len(positions), remote_position_count)
+        open_orders = max(len(orders), remote_order_count)
+        if open_positions >= settings.max_positions:
             status, reason = "CAPITAL_FULL", "已达到最大持仓数"
         elif available_cash <= 0 and trade_provider:
             status, reason = "CAPITAL_LIMITED", "模拟账户可用资金不足"
         else:
             status, reason = "CAPITAL_AVAILABLE", "资金允许评估新计划"
-        state = PortfolioState(status, available_cash, len(positions), len(orders), reason)
+        state = PortfolioState(status, available_cash, open_positions, open_orders, reason)
         _save_portfolio_sync(
             session,
             ok=True,
             state=state,
-            remote_positions=len(remote_positions),
-            remote_orders=len(remote_orders),
+            remote_positions=remote_position_count,
+            remote_orders=remote_order_count,
         )
+        _apply_portfolio_state_to_plans(session, state, settings)
         return state
     except Exception as exc:
         state = PortfolioState(
@@ -50,6 +55,7 @@ def get_portfolio_state(session: Session, trade_provider, settings: Settings) ->
             f"无法确认模拟账户资金、持仓或未成交订单：{exc}",
         )
         _save_portfolio_sync(session, ok=False, state=state, error=str(exc))
+        _apply_portfolio_state_to_plans(session, state, settings)
         return state
 
 
@@ -142,3 +148,33 @@ def _save_portfolio_sync(
         "updated_at": datetime.now(UTC).isoformat(),
     }, ensure_ascii=False)
     session.commit()
+
+
+def _apply_portfolio_state_to_plans(session: Session, state: PortfolioState, settings: Settings) -> None:
+    plans = session.scalars(
+        select(TradePlan).where(
+            TradePlan.priority_level.in_({"S", "A"}),
+            TradePlan.status.in_({
+                "ACTIVE", "PLANNED", "ARMED", "TRIGGERED", "WAITLIST",
+                "MISSED_BY_CAPITAL", "NO_CHASE", "WAIT_PULLBACK",
+            }),
+        )
+    )
+    for plan in plans:
+        plan.capital_status = state.status
+        plan.capital_reason = "" if state.status == "CAPITAL_AVAILABLE" else state.reason
+        plan.available_cash_snapshot = state.available_cash
+        plan.max_new_position_value = state.available_cash * settings.max_symbol_position_pct if state.available_cash > 0 else 0
+    session.commit()
+
+
+def _position_is_open(row: dict) -> bool:
+    try:
+        return float(row.get("qty") or row.get("quantity") or 0) > 0
+    except (TypeError, ValueError):
+        return False
+
+
+def _order_is_open(row: dict) -> bool:
+    status = str(row.get("order_status") or row.get("status") or "").upper()
+    return status in {"SUBMITTED", "SUBMITTING", "WAITING_SUBMIT", "PARTIALLY_FILLED", "PART_FILLED"}

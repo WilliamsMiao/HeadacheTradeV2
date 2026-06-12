@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import Settings
-from app.models import MarketState, TradePlan, TradingState
+from app.models import Indicator, MarketState, TradePlan, TradingState
 from app.services.audit import write_audit
 
 
@@ -38,16 +38,25 @@ def validate_active_trade_plans(session: Session, quote_provider, settings: Sett
         current = _float(row, "last_price", "cur_price")
         bid = _float(row, "bid_price", "bid_price_1")
         ask = _float(row, "ask_price", "ask_price_1")
-        spread_pct = ((ask - bid) / current) if current and bid > 0 and ask >= bid else 1.0
-        volume = _float(row, "volume")
+        spread_available = bool(current and bid > 0 and ask >= bid)
+        spread_pct = ((ask - bid) / current) if spread_available else None
+        volume = _float(row, "volume", "turnover")
+        volume_available = volume > 0
+        short_trend_ok, short_trend_reason = _short_trend_status(session, plan.symbol, current)
         context = {
             "current_price": current,
             "bid_price": bid,
             "ask_price": ask,
             "spread_pct": spread_pct,
-            "volume_ok": volume > 0,
-            "short_trend_ok": True,
+            "spread_available": spread_available,
+            "volume": volume,
+            "volume_ok": volume_available,
+            "volume_available": volume_available,
+            "short_trend_ok": short_trend_ok,
+            "short_trend_reason": short_trend_reason,
             "market_state": market.state if market else "UNKNOWN",
+            "market_state_available": market is not None,
+            "validated_at": datetime.utcnow().isoformat(),
             "snapshot": row,
         }
         contexts[plan.id] = context
@@ -89,6 +98,20 @@ def validate_active_trade_plans(session: Session, quote_provider, settings: Sett
         )
     session.commit()
     return {**counts, "contexts": contexts}
+
+
+def _short_trend_status(session: Session, symbol: str, current: float) -> tuple[bool | None, str]:
+    indicator = session.scalar(
+        select(Indicator)
+        .where(Indicator.symbol == symbol, Indicator.timeframe == "60m")
+        .order_by(Indicator.ts.desc())
+        .limit(1)
+    )
+    if not indicator or not indicator.ma20 or current <= 0:
+        return None, "缺少最新 60 分钟 MA20"
+    if current >= indicator.ma20:
+        return True, f"当前价未跌破 60 分钟 MA20（{indicator.ma20:.2f}）"
+    return False, f"当前价低于 60 分钟 MA20（{indicator.ma20:.2f}）"
 
 
 def _symbol(row: dict) -> str:
