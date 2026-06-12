@@ -1,8 +1,10 @@
 {% extends "base.html" %}
+{% from "_freshness.html" import freshness_bar %}
 {% block content %}
 <header class="page-header compact">
   <div><h1>模拟订单</h1><p>仅展示 Futu 模拟交易订单，真实交易在代码层永久禁用。</p></div>
 </header>
+{{ freshness_bar(freshness, "模拟订单") }}
 <section class="panel">
   <div class="panel-head"><div class="panel-head-copy"><h2>订单记录</h2><span>状态由 30 秒交易循环持续同步</span></div><small>{{ orders|length }} 条</small></div>
   <div class="table-wrap"><table>

@@ -1,9 +1,11 @@
 {% extends "base.html" %}
+{% from "_freshness.html" import freshness_bar %}
 {% block content %}
 <header class="page-header compact">
   <div><h1>候选观察池</h1><p>候选分代表值得观察，不代表交易优先级；只有出现有效 60 分钟结构后，才可能进入作战池。</p></div>
   <div class="header-actions"><button data-task="screen-market" data-loading-text="正在扫描">重新扫描市场</button></div>
 </header>
+{{ freshness_bar(freshness, "候选观察池") }}
 <div class="flow-explanation page-explanation">
   <p><strong>观察分高</strong>表示流动性、活跃度和技术标签较好。</p>
   <p><strong>未进入作战池</strong>通常是因为没有结构、仍在等待确认、止损过远或日线不支持。</p>

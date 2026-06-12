@@ -1,8 +1,10 @@
 {% extends "base.html" %}
+{% from "_freshness.html" import freshness_bar %}
 {% block content %}
 <header class="page-header compact">
   <div><h1>模拟持仓管理</h1><p>先处理止损、目标与隔夜风险，再考虑新开仓。</p></div>
 </header>
+{{ freshness_bar(freshness, "模拟持仓") }}
 <div class="position-management-grid">
 {% for item in positions %}
 {% set position = item.record %}

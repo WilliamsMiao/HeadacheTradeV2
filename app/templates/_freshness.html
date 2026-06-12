@@ -1,0 +1,8 @@
+{% macro freshness_bar(info, label="本栏目") %}
+<div class="freshness-bar {{ 'is-stale' if info.stale else 'is-current' }}">
+  <strong>{{ label }}：{{ info.status }}</strong>
+  <span>最近刷新（香港时间）：{{ info.last_at|system_dt if info.last_at else "尚未产生数据" }}</span>
+  <span>下次计划刷新（香港时间）：{{ info.next_at|system_dt }}</span>
+  <span>刷新机制：{{ info.schedule }}</span>
+</div>
+{% endmacro %}

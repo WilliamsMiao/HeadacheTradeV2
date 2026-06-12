@@ -72,6 +72,7 @@ from app.services.workbench import (
 from app.services.command_center import command_center_payload
 from app.services.plan_prices import refresh_trade_plan_prices
 from app.services.portfolio_manager import portfolio_sync_status
+from app.services.freshness import freshness_context
 from app.providers.futu_provider import FutuProvider
 from app.services.view_models import (
     battle_view_models,
@@ -248,6 +249,7 @@ def candidates_page(request: Request, pool: str = "", session: Session = Depends
             "items": candidate_view_models(session, items),
             "selected_pool": pool,
             "pool_counts": _candidate_pool_counts(session),
+            "freshness": freshness_context(session, sections={"candidates"})["candidates"],
         },
     )
 
@@ -279,7 +281,7 @@ def structures_page(request: Request, scope: str = "active", session: Session = 
     return templates.TemplateResponse(
         request,
         "structures.html",
-        {"events": structure_view_models(session, events), "daily_states": daily_states, "selected_scope": scope},
+        {"events": structure_view_models(session, events), "daily_states": daily_states, "selected_scope": scope, "freshness": freshness_context(session, sections={"structures"})["structures"]},
     )
 
 
@@ -292,7 +294,7 @@ def battle_pool_page(request: Request, session: Session = Depends(get_session)):
             .order_by(BattlePoolItem.score.desc(), BattlePoolItem.symbol)
         )
     )
-    return templates.TemplateResponse(request, "battle_pool.html", {"items": battle_view_models(session, items)})
+    return templates.TemplateResponse(request, "battle_pool.html", {"items": battle_view_models(session, items), "freshness": freshness_context(session, sections={"battle"})["battle"]})
 
 
 @app.get("/trade-plans", response_class=HTMLResponse)
@@ -307,7 +309,7 @@ def trade_plans_page(request: Request, session: Session = Depends(get_session)):
     return templates.TemplateResponse(
         request,
         "trade_plans.html",
-        {"plans": plans, "groups": trade_plan_groups(session, plans, get_settings())},
+        {"plans": plans, "groups": trade_plan_groups(session, plans, get_settings()), "freshness": freshness_context(session, sections={"plans"})["plans"]},
     )
 
 
@@ -325,24 +327,24 @@ def trade_plan_prices_api(session: Session = Depends(get_session)):
 @app.get("/sim-orders", response_class=HTMLResponse)
 def sim_orders_page(request: Request, session: Session = Depends(get_session)):
     orders = list(session.scalars(select(SimOrder).order_by(SimOrder.submitted_at.desc()).limit(300)))
-    return templates.TemplateResponse(request, "sim_orders.html", {"orders": order_view_models(session, orders)})
+    return templates.TemplateResponse(request, "sim_orders.html", {"orders": order_view_models(session, orders), "freshness": freshness_context(session, sections={"orders"})["orders"]})
 
 
 @app.get("/positions", response_class=HTMLResponse)
 def positions_page(request: Request, session: Session = Depends(get_session)):
     positions = list(session.scalars(select(Position).order_by(Position.updated_at.desc()).limit(300)))
-    return templates.TemplateResponse(request, "positions.html", {"positions": position_view_models(session, positions)})
+    return templates.TemplateResponse(request, "positions.html", {"positions": position_view_models(session, positions), "freshness": freshness_context(session, sections={"positions"})["positions"]})
 
 
 @app.get("/journal", response_class=HTMLResponse)
 def journal_page(request: Request, session: Session = Depends(get_session)):
-    return templates.TemplateResponse(request, "journal.html", {"trades": journal_view_models(session)})
+    return templates.TemplateResponse(request, "journal.html", {"trades": journal_view_models(session), "freshness": freshness_context(session, sections={"journal"})["journal"]})
 
 
 @app.get("/audit-logs", response_class=HTMLResponse)
 def audit_logs_page(request: Request, session: Session = Depends(get_session)):
     logs = list(session.scalars(select(AuditLog).order_by(AuditLog.created_at.desc()).limit(500)))
-    return templates.TemplateResponse(request, "audit_logs.html", {"logs": logs})
+    return templates.TemplateResponse(request, "audit_logs.html", {"logs": logs, "freshness": freshness_context(session, sections={"audit"})["audit"]})
 
 
 @app.get("/market", response_class=HTMLResponse)
@@ -352,7 +354,7 @@ def market_page(request: Request, session: Session = Depends(get_session)):
     return templates.TemplateResponse(
         request,
         "market_dashboard.html",
-        {"market": market, "market_checks": market_diagnostics(session, settings.market_symbols)},
+        {"market": market, "market_checks": market_diagnostics(session, settings.market_symbols), "freshness": freshness_context(session, sections={"market"})["market"]},
     )
 
 
@@ -453,6 +455,7 @@ def opend_page(request: Request, session: Session = Depends(get_session)):
             "status": _opend_payload(status_result),
             "message": status_result.message,
             "portfolio_sync": portfolio_sync_status(session),
+            "freshness": freshness_context(session, sections={"portfolio"})["portfolio"],
         },
     )
 
@@ -709,6 +712,7 @@ def _dashboard_context(session: Session) -> dict[str, object]:
         "approvals": approvals,
         "summary": summary,
         "command": command_center_payload(session, settings),
+        "freshness": freshness_context(session),
     }
 
 

@@ -1,10 +1,12 @@
 {% extends "base.html" %}
 {% from "_journey.html" import trade_journey %}
+{% from "_freshness.html" import freshness_bar %}
 {% block content %}
 <header class="page-header compact">
   <div><h1>交易复盘</h1><p>只收录已经产生模拟成交或持仓的交易，按完整链路聚合执行过程和结果。</p></div>
   <div class="header-actions"><a class="button-secondary" href="/audit-logs">查看系统审计</a></div>
 </header>
+{{ freshness_bar(freshness, "交易复盘") }}
 <div class="journal-trade-list">
   {% for trade in trades %}
   {% set plan = trade.plan %}

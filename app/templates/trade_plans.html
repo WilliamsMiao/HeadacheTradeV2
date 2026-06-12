@@ -1,10 +1,12 @@
 {% extends "base.html" %}
 {% from "_journey.html" import trade_journey %}
+{% from "_freshness.html" import freshness_bar %}
 {% block content %}
 <header class="page-header compact">
   <div><h1>交易计划详情</h1><p>交易计划的权威页面：完整展示来源、价格、实时校验、规则审批、资金状态、订单和持仓链路。</p><small class="live-price-status" data-live-price-status>正在连接 OpenD 获取实时价</small></div>
   <div class="header-actions toolbar"><button data-task="run-pipeline" data-loading-text="正在生成">刷新交易计划</button><button class="secondary" data-task="set-price-alerts" data-loading-text="正在同步">同步到价提醒</button></div>
 </header>
+{{ freshness_bar(freshness, "交易计划") }}
 {% for group in groups %}
 <section class="plan-group">
   <div class="section-heading"><div><h2>{{ group["title"] }}</h2><p>{{ group["items"]|length }} 个计划</p></div></div>
