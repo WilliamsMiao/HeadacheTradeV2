@@ -16,7 +16,14 @@ FAILED_STATUSES = {"FAILED", "DISABLED", "DELETED"}
 
 def sync_sim_orders(session: Session, trade_provider, timeout_seconds: int = 60) -> dict[str, int]:
     rows = trade_provider.get_open_orders()
-    deals = trade_provider.get_deals()
+    deals_supported = True
+    try:
+        deals = trade_provider.get_deals()
+    except RuntimeError as exc:
+        if "模拟交易不支持成交数据" not in str(exc):
+            raise
+        deals = []
+        deals_supported = False
     updated = filled = 0
     by_id = {str(row.get("order_id") or ""): row for row in rows}
     for order in session.scalars(select(SimOrder).where(SimOrder.status.in_({"SUBMITTED", "PARTIALLY_FILLED"}))):
@@ -73,7 +80,7 @@ def sync_sim_orders(session: Session, trade_provider, timeout_seconds: int = 60)
             )
         )
     session.commit()
-    return {"updated": updated, "filled": filled}
+    return {"updated": updated, "filled": filled, "deals_supported": deals_supported}
 
 
 def _open_or_close_position(session: Session, order: SimOrder) -> None:
