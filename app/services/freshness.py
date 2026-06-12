@@ -20,6 +20,7 @@ from app.services.portfolio_manager import portfolio_sync_status
 
 NEW_YORK = ZoneInfo("America/New_York")
 HOURLY_REFRESH_TIMES = (time(10, 35), time(11, 35), time(12, 35), time(13, 35), time(14, 35), time(15, 35), time(16, 5))
+MARKET_REFRESH_TIMES = (time(9, 20), *HOURLY_REFRESH_TIMES)
 
 
 def freshness_context(
@@ -46,7 +47,13 @@ def freshness_context(
     if "positions" in requested:
         contexts["positions"] = _freshness(_max_value(session, Position.updated_at), _next_sim_refresh(now_utc), "模拟交易循环", now_utc, 3)
     if "market" in requested:
-        contexts["market"] = _freshness(_max_value(session, MarketState.updated_at), _next_hourly_refresh(now_utc), "每根 60 分钟 K 线完成后刷新", now_utc, 20 * 60)
+        contexts["market"] = _freshness(
+            _max_value(session, MarketState.updated_at),
+            _next_scheduled_refresh(now_utc, MARKET_REFRESH_TIMES),
+            "开盘前 10 分钟生成当日基线；之后每根 60 分钟 K 线完成后刷新",
+            now_utc,
+            20 * 60,
+        )
     if "portfolio" in requested:
         portfolio_at = _parse_datetime(portfolio_sync_status(session).get("updated_at"))
         contexts["portfolio"] = _freshness(portfolio_at, _next_sim_refresh(now_utc), "模拟账户同步", now_utc, 3)
@@ -90,12 +97,16 @@ def _max_value(session: Session, column) -> datetime | None:
 
 
 def _next_hourly_refresh(now_utc: datetime) -> datetime:
+    return _next_scheduled_refresh(now_utc, HOURLY_REFRESH_TIMES)
+
+
+def _next_scheduled_refresh(now_utc: datetime, slots: tuple[time, ...]) -> datetime:
     local = now_utc.astimezone(NEW_YORK)
     for day_offset in range(8):
         day = local.date() + timedelta(days=day_offset)
         if day.weekday() >= 5:
             continue
-        for slot in HOURLY_REFRESH_TIMES:
+        for slot in slots:
             candidate = datetime.combine(day, slot, NEW_YORK)
             if candidate > local:
                 return candidate.astimezone(UTC)

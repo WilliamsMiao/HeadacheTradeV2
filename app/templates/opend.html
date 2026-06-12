@@ -47,11 +47,14 @@
   </div>
   <dl class="metric-grid">
     <div><dt>最近同步</dt><dd>{{ portfolio_sync.updated_at|system_dt }}</dd></div>
+    <div><dt>账户权益</dt><dd>{{ portfolio_sync.account_equity|money if portfolio_sync.account_equity is defined else "-" }}</dd></div>
     <div><dt>可用资金</dt><dd>{{ portfolio_sync.available_cash|money if portfolio_sync.available_cash is defined else "-" }}</dd></div>
+    <div><dt>购买力</dt><dd>{{ portfolio_sync.buying_power|money if portfolio_sync.buying_power is defined else "-" }}</dd></div>
+    <div><dt>权益来源</dt><dd>{{ "Futu 模拟账户" if portfolio_sync.account_equity_source == "FUTU_SIM_ACCOUNT" else "未确认" }}</dd></div>
     <div><dt>Futu 持仓</dt><dd>{{ portfolio_sync.remote_positions if portfolio_sync.remote_positions is defined else "-" }}</dd></div>
     <div><dt>Futu 未成交订单</dt><dd>{{ portfolio_sync.remote_orders if portfolio_sync.remote_orders is defined else "-" }}</dd></div>
   </dl>
-  {% if not portfolio_sync.ok %}<div class="blocking-reason"><strong>暂时无法自动下单</strong><p>系统尚未确认模拟账户的可用资金、当前持仓和待成交订单，因此会暂停提交新订单。{{ portfolio_sync.error or portfolio_sync.reason }}</p></div>{% endif %}
+  {% if not portfolio_sync.ok %}<div class="blocking-reason"><strong>暂时无法自动下单</strong><p>系统尚未确认模拟账户权益、可用资金、当前持仓和待成交订单，因此会暂停提交新订单。{{ portfolio_sync.error or portfolio_sync.reason }}</p><p>请依次检查 OpenD 服务、Futu 登录状态、模拟账户可用性和交易权限，再刷新账户同步。</p></div>{% endif %}
 </section>
 
 <section class="grid two">

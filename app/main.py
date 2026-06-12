@@ -126,14 +126,17 @@ app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="stat
 
 
 class RiskConfigUpdate(BaseModel):
-    account_equity: float
     risk_per_trade_pct: float
-    neutral_risk_multiplier: float
-    script_b_risk_multiplier: float
     max_positions: int
     max_symbol_position_pct: float
-    max_industry_exposure_pct: float
-    cooldown_days: int
+    max_daily_new_trades: int
+    max_daily_loss_pct: float
+    max_consecutive_losses: int
+    force_intraday_exit: bool
+    enable_overnight_hold: bool
+    no_new_entry_before_minutes_after_open: int
+    no_new_entry_before_close_minutes: int
+    reason: str = ""
 
 
 class PasswordPayload(BaseModel):
@@ -442,7 +445,14 @@ def workbench_default(session: Session = Depends(get_session)):
 
 @app.get("/risk", response_class=HTMLResponse)
 def risk_page(request: Request, session: Session = Depends(get_session)):
-    return templates.TemplateResponse(request, "risk.html", {"config": get_or_create_risk_config(session)})
+    from app.services.risk_control import risk_page_context
+
+    config = get_or_create_risk_config(session)
+    return templates.TemplateResponse(
+        request,
+        "risk.html",
+        {"config": config, "risk": risk_page_context(session, get_settings(), config)},
+    )
 
 
 @app.get("/opend", response_class=HTMLResponse)
@@ -462,11 +472,15 @@ def opend_page(request: Request, session: Session = Depends(get_session)):
 
 @app.post("/api/risk")
 def update_risk_config(payload: RiskConfigUpdate, session: Session = Depends(get_session)):
-    config = get_or_create_risk_config(session)
-    for field, value in payload.model_dump().items():
-        setattr(config, field, value)
-    session.commit()
-    return {"status": "ok"}
+    from app.services.risk_control import update_risk_settings
+
+    values = payload.model_dump()
+    reason = values.pop("reason", "")
+    try:
+        effective = update_risk_settings(session, get_settings(), values, reason)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"status": "ok", "effective": effective}
 
 
 @app.post("/api/signals/{signal_id}/approve")
@@ -652,7 +666,9 @@ def _opend_payload(result: opend_admin.AdminResult) -> dict[str, object]:
 
 
 def _dashboard_context(session: Session) -> dict[str, object]:
-    settings = get_settings()
+    from app.services.risk_control import effective_risk_settings
+
+    settings = effective_risk_settings(session, get_settings())
     market = session.scalar(select(MarketState).order_by(MarketState.updated_at.desc()).limit(1))
     market_checks = market_diagnostics(session, settings.market_symbols)
     candidates = list(

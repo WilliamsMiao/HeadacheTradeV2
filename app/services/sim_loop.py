@@ -35,7 +35,7 @@ def run_sim_loop(session: Session, settings: Settings, use_mock: bool = False) -
         )
         for plan in triggered:
             plan.available_cash_snapshot = portfolio.available_cash
-            plan.max_new_position_value = portfolio.available_cash * settings.max_symbol_position_pct
+            plan.max_new_position_value = portfolio.account_equity * settings.max_symbol_position_pct
             decision = rules_approve_trade_plan(
                 session,
                 plan,

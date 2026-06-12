@@ -1,4 +1,5 @@
-from datetime import datetime
+from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -9,6 +10,7 @@ from app.services.audit import write_audit
 
 
 VALIDATION_STATUSES = {"ACTIVE", "ARMED", "WAIT_PULLBACK", "PLANNED", "WAITLIST", "MISSED_BY_CAPITAL", "NO_CHASE"}
+NEW_YORK = ZoneInfo("America/New_York")
 
 
 def validate_active_trade_plans(session: Session, quote_provider, settings: Settings) -> dict[str, object]:
@@ -26,6 +28,7 @@ def validate_active_trade_plans(session: Session, quote_provider, settings: Sett
     snapshots = quote_provider.get_market_snapshot([plan.symbol for plan in plans]) if plans else []
     by_symbol = {_symbol(row): row for row in snapshots}
     market = session.scalar(select(MarketState).order_by(MarketState.updated_at.desc()).limit(1))
+    market_state_current = _market_state_is_current(market)
     contexts: dict[int, dict] = {}
     counts = {"validated": 0, "triggered": 0, "invalidated": 0, "no_chase": 0}
 
@@ -55,7 +58,13 @@ def validate_active_trade_plans(session: Session, quote_provider, settings: Sett
             "short_trend_ok": short_trend_ok,
             "short_trend_reason": short_trend_reason,
             "market_state": market.state if market else "UNKNOWN",
-            "market_state_available": market is not None,
+            "market_state_available": market is not None and market_state_current,
+            "market_state_updated_at": market.updated_at.isoformat() if market else None,
+            "market_state_reason": (
+                "市场风向标已按当前美股交易日刷新"
+                if market_state_current
+                else "市场风向标不是当前美股交易日数据，禁止沿用旧状态开仓"
+            ),
             "validated_at": datetime.utcnow().isoformat(),
             "snapshot": row,
         }
@@ -98,6 +107,16 @@ def validate_active_trade_plans(session: Session, quote_provider, settings: Sett
         )
     session.commit()
     return {**counts, "contexts": contexts}
+
+
+def _market_state_is_current(market: MarketState | None, now: datetime | None = None) -> bool:
+    if market is None or market.updated_at is None:
+        return False
+    now_utc = now or datetime.now(UTC)
+    if now_utc.tzinfo is None:
+        now_utc = now_utc.replace(tzinfo=UTC)
+    updated_utc = market.updated_at.replace(tzinfo=UTC) if market.updated_at.tzinfo is None else market.updated_at.astimezone(UTC)
+    return updated_utc.astimezone(NEW_YORK).date() == now_utc.astimezone(NEW_YORK).date()
 
 
 def _short_trend_status(session: Session, symbol: str, current: float) -> tuple[bool | None, str]:

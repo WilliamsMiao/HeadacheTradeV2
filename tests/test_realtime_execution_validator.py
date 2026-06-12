@@ -4,7 +4,7 @@ from sqlalchemy import select
 
 from app.config import Settings
 from app.models import Indicator, MarketState, TradePlan
-from app.services.realtime_execution_validator import validate_active_trade_plans
+from app.services.realtime_execution_validator import _market_state_is_current, validate_active_trade_plans
 
 
 class QuoteProvider:
@@ -90,3 +90,22 @@ def test_plan_is_no_chase_or_invalidated(session):
     session.commit()
     validate_active_trade_plans(session, QuoteProvider(94), Settings())
     assert record.status == "INVALIDATED"
+
+
+def test_market_state_must_be_computed_on_current_new_york_day():
+    current = MarketState(
+        as_of=datetime(2026, 6, 11).date(),
+        state="RISK_ON",
+        reason="ok",
+        updated_at=datetime(2026, 6, 12, 13, 20),
+    )
+    stale = MarketState(
+        as_of=datetime(2026, 6, 10).date(),
+        state="RISK_ON",
+        reason="old",
+        updated_at=datetime(2026, 6, 11, 13, 20),
+    )
+    now = datetime(2026, 6, 12, 14, 0)
+
+    assert _market_state_is_current(current, now) is True
+    assert _market_state_is_current(stale, now) is False

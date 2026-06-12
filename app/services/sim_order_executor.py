@@ -36,7 +36,8 @@ def execute_approved_sim_orders(session: Session, trade_provider, settings: Sett
         qty = int(plan.suggested_shares or 0)
         if qty <= 0:
             risk_per_share = float(plan.breakout_entry_price or 0) - plan.stop_price
-            risk_budget = settings.risk_per_trade_pct * float(plan.available_cash_snapshot or 100_000)
+            equity = float(plan.max_new_position_value or 0) / settings.max_symbol_position_pct if settings.max_symbol_position_pct > 0 else 0
+            risk_budget = settings.risk_per_trade_pct * equity
             qty = int(risk_budget // risk_per_share) if risk_per_share > 0 else 0
         if qty <= 0:
             plan.status = "BLOCKED"

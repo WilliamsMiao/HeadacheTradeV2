@@ -95,6 +95,42 @@ def run_compute_indicators(
     return count
 
 
+def run_market_refresh(
+    session: Session,
+    settings: Settings,
+    use_mock: bool = False,
+) -> dict[str, object]:
+    provider = get_provider(settings, use_mock)
+    try:
+        details = update_market_data(
+            session,
+            provider,
+            settings.market_symbols,
+            timeframes=(TREND_TIMEFRAME,),
+        )
+    finally:
+        close = getattr(provider, "close", None)
+        if close:
+            close()
+    indicators = 0
+    for symbol in settings.market_symbols:
+        indicators += compute_indicators_for_symbol(session, symbol, TREND_TIMEFRAME)
+    evaluation = evaluate_market(session, settings.market_symbols)
+    record = persist_market_state(session, evaluation)
+    failures = {
+        key: value
+        for key, value in details.items()
+        if value.startswith("data source failed:") or value == "no bars returned from data source"
+    }
+    return {
+        "market_data": details,
+        "failed": len(failures),
+        "indicators": indicators,
+        "market_state": record.state,
+        "as_of": record.as_of,
+    }
+
+
 def run_scan_structures(session: Session, settings: Settings) -> dict[str, int]:
     structures = 0
     daily_states = 0

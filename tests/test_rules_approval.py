@@ -53,7 +53,7 @@ def test_complete_rules_approve_sim_trade(session, monkeypatch):
         session,
         plan,
         {"current_price": 101, "spread_pct": 0.001, "volume_ok": True, "short_trend_ok": True, "market_state": "RISK_ON"},
-        PortfolioState("CAPITAL_AVAILABLE", 100000, 0, 0, "ok"),
+        PortfolioState("CAPITAL_AVAILABLE", 100000, 0, 0, "ok", 100000, 100000, "FUTU_SIM_ACCOUNT", "OK"),
         Settings(enable_sim_trading=True),
     )
     assert decision.approved
@@ -70,7 +70,7 @@ def test_price_ready_plan_must_be_triggered_before_approval(session, monkeypatch
         session,
         plan,
         {"current_price": 101, "spread_pct": 0.001, "volume_ok": True, "short_trend_ok": True, "market_state": "RISK_ON"},
-        PortfolioState("CAPITAL_AVAILABLE", 100000, 0, 0, "ok"),
+        PortfolioState("CAPITAL_AVAILABLE", 100000, 0, 0, "ok", 100000, 100000, "FUTU_SIM_ACCOUNT", "OK"),
         Settings(enable_sim_trading=True),
     )
     assert decision.decision == "REJECTED_BY_PRICE"

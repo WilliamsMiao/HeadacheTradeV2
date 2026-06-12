@@ -9,6 +9,7 @@ from app.services.pipeline import (
     run_60m,
     run_compute_indicators,
     run_daily,
+    run_market_refresh,
     run_pipeline,
     run_scan_structures,
     run_screen_market,
@@ -20,6 +21,7 @@ from app.services.pipeline_lock import PipelineBusyError, pipeline_lock
 from app.services.sim_loop import run_sim_loop
 from app.providers.futu_trade_provider import FutuTradeProvider
 from app.services.portfolio_manager import check_sim_account_connection
+from app.services.risk_control import effective_risk_settings
 
 
 COMMANDS = (
@@ -32,6 +34,7 @@ COMMANDS = (
     "generate-trade-plans",
     "set-price-alerts",
     "run-daily",
+    "run-market-refresh",
     "run-60m",
     "run-pipeline",
     "run-backtest",
@@ -66,6 +69,7 @@ def main() -> None:
     try:
         with pipeline_lock():
             with SessionLocal() as session:
+                settings = effective_risk_settings(session, settings)
                 if args.command == "init-db":
                     payload = {"status": "ok"}
                 elif args.command == "screen-market":
@@ -84,6 +88,8 @@ def main() -> None:
                     payload = run_set_price_alerts(session, settings, args.mock)
                 elif args.command == "run-daily":
                     payload = run_daily(session, settings, args.mock)
+                elif args.command == "run-market-refresh":
+                    payload = run_market_refresh(session, settings, args.mock)
                 elif args.command == "run-60m":
                     payload = run_60m(session, settings, args.mock)
                 elif args.command == "monitor-60m":

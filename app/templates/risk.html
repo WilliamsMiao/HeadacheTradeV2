@@ -2,43 +2,117 @@
 {% block content %}
 <header class="page-header compact">
   <div>
-    <h1>风控设置</h1>
-    <p>仓位由风险反推，不由看好程度或评分决定。</p>
+    <h1>风控与仓位控制</h1>
+    <p>仓位由 Futu 模拟账户权益、单笔风险、止损距离和持仓限制共同决定；不由看好程度或评分决定。</p>
   </div>
+  <span class="state {{ 'state-success' if risk.allows_entry else 'state-danger' }}">
+    {{ "当前允许新开仓" if risk.allows_entry else "当前禁止新开仓" }}
+  </span>
 </header>
+
+{% if risk.blockers %}
+<section class="blocking-reason">
+  <strong>禁止新开仓原因</strong>
+  <ul>{% for reason in risk.blockers %}<li>{{ reason }}</li>{% endfor %}</ul>
+</section>
+{% endif %}
+
+<section class="summary-grid risk-summary">
+  <article class="summary-card"><span>配置风险等级</span><strong>{{ risk.risk_level }}</strong><small>由单笔风险、持仓数量和集中度综合判断</small></article>
+  <article class="summary-card"><span>当前持仓</span><strong>{{ risk.open_positions }} / {{ risk.effective.max_positions }}</strong><small>达到上限后停止新增仓位</small></article>
+  <article class="summary-card"><span>今日新开仓</span><strong>{{ risk.today_orders }} / {{ risk.effective.max_daily_new_trades }}</strong><small>按模拟买入订单统计</small></article>
+  <article class="summary-card"><span>真实交易</span><strong>永久禁用</strong><small>本系统只允许模拟交易</small></article>
+</section>
+
+<section class="panel risk-equity-panel">
+  <div class="panel-head">
+    <div class="panel-head-copy"><h2>Futu 模拟账户权益</h2><span>账户权益是仓位计算的唯一资金基准，不允许手动修改。</span></div>
+    <span class="state {{ 'state-success' if risk.equity_ok else 'state-danger' }}">{{ "同步正常" if risk.equity_ok else "同步失败或过期" }}</span>
+  </div>
+  <dl class="metric-grid">
+    <div><dt>当前权益</dt><dd>{{ risk.equity|money if risk.equity else "-" }}</dd></div>
+    <div><dt>可用现金</dt><dd>{{ risk.portfolio.available_cash|money if risk.portfolio.available_cash is defined else "-" }}</dd></div>
+    <div><dt>购买力</dt><dd>{{ risk.portfolio.buying_power|money if risk.portfolio.buying_power is defined else "-" }}</dd></div>
+    <div><dt>数据来源</dt><dd>Futu 模拟账户</dd></div>
+    <div><dt>最近同步</dt><dd>{{ risk.portfolio.updated_at|system_dt }}</dd></div>
+    <div><dt>同步状态</dt><dd>{{ risk.portfolio.account_equity_sync_status or "未知" }}</dd></div>
+  </dl>
+  {% if not risk.equity_ok %}<p class="field-error">无法确认新鲜的模拟账户权益，因此系统不会计算新仓位或提交新订单。请前往 <a href="/opend">OpenD 管理</a>检查账户同步。</p>{% endif %}
+</section>
+
+<section class="panel">
+  <div class="panel-head"><div class="panel-head-copy"><h2>风险如何变成仓位</h2><span>系统先确定最多能亏多少钱，再根据入场价与止损价的距离反推股数。</span></div></div>
+  <ol class="risk-flow" aria-label="仓位计算链路">
+    <li>Futu 账户权益 + 单笔风险比例</li><li>每笔最大允许亏损</li><li>入场价与止损价差</li><li>建议股数</li><li>单股仓位上限</li><li>最终下单数量</li>
+  </ol>
+</section>
 
 <section class="panel form-panel">
   <div class="panel-head">
-    <div class="panel-head-copy">
-      <h2>组合风险参数</h2>
-      <span>保存后用于后续建议计算，不会自动修改已有模拟持仓。</span>
-    </div>
+    <div class="panel-head-copy"><h2>当前生效配置</h2><span>每项均显示实际生效值与来源；保存后模拟交易循环会读取这些值。</span></div>
   </div>
-  <form id="risk-form">
+  <div class="risk-presets" aria-label="推荐风险模板">
+    <button type="button" class="secondary" data-risk-preset="conservative">采用观察期保守模式</button>
+    <button type="button" class="secondary" data-risk-preset="standard">采用标准模拟模式</button>
+    <button type="button" class="secondary" data-risk-preset="aggressive">采用激进测试模式</button>
+  </div>
+  <form id="risk-form" data-account-equity="{{ risk.equity }}">
     <fieldset>
-      <legend>账户风险</legend>
-      <label>账户权益<input name="account_equity" type="number" step="100" value="{{ config.account_equity }}"><small>用于反推每笔交易允许亏损金额。</small></label>
-      <label>单笔风险比例<input name="risk_per_trade_pct" type="number" step="0.001" value="{{ config.risk_per_trade_pct }}"><small>例如 0.01 表示每笔最多亏损 1%。</small></label>
+      <legend>单笔风险与仓位</legend>
+      <label>单笔风险比例
+        <input name="risk_per_trade_pct" type="number" min="0.0001" max="0.05" step="0.0005" value="{{ risk.effective.risk_per_trade_pct }}" required>
+        <small><span data-risk-percent>{{ risk.effective.risk_per_trade_pct|percent }}</span>；按当前权益计算，每笔最多亏损 <strong data-risk-loss>{{ risk.max_loss_amount|money }}</strong>。来源：{{ risk.sources.risk_per_trade_pct }}</small>
+      </label>
+      <label>单只股票最大仓位
+        <input name="max_symbol_position_pct" type="number" min="0.01" max="1" step="0.01" value="{{ risk.effective.max_symbol_position_pct }}" required>
+        <small><span data-position-percent>{{ risk.effective.max_symbol_position_pct|percent }}</span>；当前最多占用 <strong data-position-limit>{{ risk.max_symbol_amount|money }}</strong>。来源：{{ risk.sources.max_symbol_position_pct }}</small>
+      </label>
+      <label>最大持仓数<input name="max_positions" type="number" min="1" max="10" step="1" value="{{ risk.effective.max_positions }}" required><small>当前生效 {{ risk.effective.max_positions }} 个；来源：{{ risk.sources.max_positions }}</small></label>
     </fieldset>
     <fieldset>
-      <legend>剧本调整</legend>
-      <label>中性市场风险乘数<input name="neutral_risk_multiplier" type="number" step="0.1" value="{{ config.neutral_risk_multiplier }}"><small>市场中性偏强时自动降低风险。</small></label>
-      <label>剧本 B 风险乘数<input name="script_b_risk_multiplier" type="number" step="0.1" value="{{ config.script_b_risk_multiplier }}"><small>顶结构失效追随剧本默认更小仓位。</small></label>
+      <legend>日内资金闸门</legend>
+      <label>每日最多新开仓<input name="max_daily_new_trades" type="number" min="1" max="20" step="1" value="{{ risk.effective.max_daily_new_trades }}" required><small>达到上限后，其余计划继续观察但不会下单。</small></label>
+      <label>每日亏损停止线<input name="max_daily_loss_pct" type="number" min="0.001" max="0.1" step="0.001" value="{{ risk.effective.max_daily_loss_pct }}" required><small>当前为 {{ risk.effective.max_daily_loss_pct|percent }}；触发后当天停止新增仓位。</small></label>
+      <label>连续亏损停止次数<input name="max_consecutive_losses" type="number" min="1" max="10" step="1" value="{{ risk.effective.max_consecutive_losses }}" required><small>连续亏损达到该次数后停止新增仓位。</small></label>
     </fieldset>
     <fieldset>
-      <legend>仓位限制</legend>
-      <label>最大持仓数<input name="max_positions" type="number" step="1" value="{{ config.max_positions }}"><small>限制组合同时持仓数量。</small></label>
-      <label>单股最大仓位<input name="max_symbol_position_pct" type="number" step="0.01" value="{{ config.max_symbol_position_pct }}"><small>限制单一股票占账户权益比例。</small></label>
-      <label>行业最大暴露<input name="max_industry_exposure_pct" type="number" step="0.01" value="{{ config.max_industry_exposure_pct }}"><small>限制同一行业集中风险。</small></label>
+      <legend>交易时段与隔夜风险</legend>
+      <label>开盘后等待分钟<input name="no_new_entry_before_minutes_after_open" type="number" min="0" max="180" step="5" value="{{ risk.effective.no_new_entry_before_minutes_after_open }}" required><small>开盘初期波动较大，在此期间不新增仓位。</small></label>
+      <label>收盘前停止开仓分钟<input name="no_new_entry_before_close_minutes" type="number" min="0" max="180" step="5" value="{{ risk.effective.no_new_entry_before_close_minutes }}" required><small>避免临近收盘才建立新仓。</small></label>
+      <label class="toggle-field"><input name="force_intraday_exit" type="checkbox" {% if risk.effective.force_intraday_exit %}checked{% endif %}><span>强制日内平仓</span><small>关闭后可能持仓过夜，风险显著增加。</small></label>
+      <label class="toggle-field"><input name="enable_overnight_hold" type="checkbox" {% if risk.effective.enable_overnight_hold %}checked{% endif %}><span>允许隔夜持仓</span><small>仅影响后续持仓管理，不会修改历史交易。</small></label>
     </fieldset>
-    <fieldset>
-      <legend>冷却机制</legend>
-      <label>冷却天数<input name="cooldown_days" type="number" step="1" value="{{ config.cooldown_days }}"><small>硬止损或结构失败后暂停新开仓。</small></label>
-    </fieldset>
+
+    <section class="risk-calculator">
+      <div><h3>仓位计算示例</h3><p>修改入场价或止损价，立即查看仓位如何反推。</p></div>
+      <label>示例入场价<input data-example-entry type="number" min="0.01" step="0.01" value="100"></label>
+      <label>示例止损价<input data-example-stop type="number" min="0.01" step="0.01" value="95"></label>
+      <dl>
+        <div><dt>每股风险</dt><dd data-example-risk>-</dd></div>
+        <div><dt>最大允许亏损</dt><dd data-example-loss>-</dd></div>
+        <div><dt>按止损计算股数</dt><dd data-example-shares>-</dd></div>
+        <div><dt>最终仓位金额</dt><dd data-example-value>-</dd></div>
+        <div><dt>仓位上限是否压缩</dt><dd data-example-capped>-</dd></div>
+      </dl>
+    </section>
+
+    <label>修改原因（可选）<input name="reason" type="text" maxlength="200" placeholder="例如：观察期调低风险"><small>会写入系统审计，留空则记录为用户手动修改。</small></label>
+    <div class="save-impact">
+      <strong>保存后影响</strong>
+      <p>不会修改已有持仓、已提交订单或历史交易；会影响下一次仓位计算、资金闸门、规则审批和后续计划。强制日内平仓设置可能影响今日收盘前的持仓处理。</p>
+    </div>
     <div class="form-actions">
-      <button type="submit" data-loading-text="正在保存">保存风控参数</button>
+      <button type="submit" data-loading-text="正在保存">保存风控配置</button>
       <span class="inline-feedback" data-form-feedback aria-live="polite"></span>
     </div>
   </form>
+</section>
+
+<section class="panel">
+  <div class="panel-head"><div class="panel-head-copy"><h2>最近风控修改</h2><span>配置修改属于系统审计，不会覆盖历史记录。</span></div><a class="text-link" href="/audit-logs">查看完整审计</a></div>
+  <div class="audit-compact-list">
+    {% for log in risk.audits %}<article><time>{{ log.created_at|system_dt }}</time><strong>{{ log.reason }}</strong><span>{{ log.status|label }}</span></article>
+    {% else %}<p class="empty">暂无风控修改记录。</p>{% endfor %}
+  </div>
 </section>
 {% endblock %}

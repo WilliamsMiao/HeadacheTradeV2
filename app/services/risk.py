@@ -82,6 +82,7 @@ def calculate_position_size(
     stop_price: float | None,
     market_state: str,
     script: str,
+    account_equity: float | None = None,
 ) -> RiskResult | None:
     if stop_price is None or entry_price <= 0 or stop_price <= 0 or stop_price >= entry_price:
         return None
@@ -91,9 +92,11 @@ def calculate_position_size(
         multiplier *= config.neutral_risk_multiplier
     if script == "SCRIPT_B_TOP_INVALIDATION_CONTINUATION":
         multiplier *= config.script_b_risk_multiplier
-    allowed_loss = config.account_equity * config.risk_per_trade_pct * multiplier
+    if account_equity is None or account_equity <= 0:
+        return None
+    allowed_loss = account_equity * config.risk_per_trade_pct * multiplier
     shares_by_risk = int(allowed_loss // risk_per_share)
-    max_value = config.account_equity * config.max_symbol_position_pct
+    max_value = account_equity * config.max_symbol_position_pct
     shares_by_cap = int(max_value // entry_price)
     shares = max(0, min(shares_by_risk, shares_by_cap))
     if shares <= 0:
@@ -106,7 +109,7 @@ def calculate_position_size(
         allowed_loss=allowed_loss,
         shares=shares,
         position_value=position_value,
-        position_pct=position_value / config.account_equity,
+        position_pct=position_value / account_equity,
     )
 
 

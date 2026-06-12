@@ -16,6 +16,10 @@ class PortfolioState:
     open_positions: int
     open_orders: int
     reason: str
+    account_equity: float = 0
+    buying_power: float = 0
+    account_equity_source: str = "UNKNOWN"
+    sync_status: str = "FAILED"
 
 
 def get_portfolio_state(session: Session, trade_provider, settings: Settings) -> PortfolioState:
@@ -25,18 +29,38 @@ def get_portfolio_state(session: Session, trade_provider, settings: Settings) ->
         remote_orders = trade_provider.get_open_orders() if trade_provider else []
         remote_position_count = sum(_position_is_open(row) for row in remote_positions)
         remote_order_count = sum(_order_is_open(row) for row in remote_orders)
-        available_cash = float(account.get("cash") or account.get("power") or 0)
+        available_cash = float(account.get("cash") or 0)
+        buying_power = float(account.get("power") or account.get("max_power_short") or available_cash or 0)
+        account_equity = float(
+            account.get("total_assets")
+            or account.get("net_assets")
+            or account.get("market_val")
+            or available_cash
+            or 0
+        )
         positions = list(session.scalars(select(Position).where(Position.status == "OPEN")))
         orders = list(session.scalars(select(SimOrder).where(SimOrder.status.in_({"SUBMITTED", "PARTIALLY_FILLED"}))))
         open_positions = max(len(positions), remote_position_count)
         open_orders = max(len(orders), remote_order_count)
         if open_positions >= settings.max_positions:
             status, reason = "CAPITAL_FULL", "已达到最大持仓数"
+        elif account_equity <= 0:
+            status, reason = "CAPITAL_UNKNOWN", "无法读取 Futu 模拟账户权益，禁止新开仓"
         elif available_cash <= 0 and trade_provider:
-            status, reason = "CAPITAL_LIMITED", "模拟账户可用资金不足"
+            status, reason = "CAPITAL_LIMITED", "Futu 模拟账户可用资金不足"
         else:
             status, reason = "CAPITAL_AVAILABLE", "资金允许评估新计划"
-        state = PortfolioState(status, available_cash, open_positions, open_orders, reason)
+        state = PortfolioState(
+            status,
+            available_cash,
+            open_positions,
+            open_orders,
+            reason,
+            account_equity,
+            buying_power,
+            "FUTU_SIM_ACCOUNT",
+            "OK" if account_equity > 0 else "FAILED",
+        )
         _save_portfolio_sync(
             session,
             ok=True,
@@ -53,6 +77,10 @@ def get_portfolio_state(session: Session, trade_provider, settings: Settings) ->
             0,
             0,
             f"无法确认模拟账户资金、持仓或未成交订单：{exc}",
+            account_equity=0,
+            buying_power=0,
+            account_equity_source="UNKNOWN",
+            sync_status="FAILED",
         )
         _save_portfolio_sync(session, ok=False, state=state, error=str(exc))
         _apply_portfolio_state_to_plans(session, state, settings)
@@ -67,6 +95,8 @@ def capital_allows_new_order(
 ) -> tuple[bool, str]:
     if state.status != "CAPITAL_AVAILABLE":
         return False, state.reason
+    if state.account_equity_source != "FUTU_SIM_ACCOUNT" or state.sync_status != "OK" or state.account_equity <= 0:
+        return False, "无法读取 Futu 模拟账户权益，禁止新开仓"
     if session.scalar(select(Position).where(Position.symbol == plan.symbol, Position.status == "OPEN")):
         return False, "同标的已有模拟持仓"
     if session.scalar(
@@ -139,6 +169,10 @@ def _save_portfolio_sync(
         "ok": ok,
         "status": state.status,
         "available_cash": state.available_cash,
+        "account_equity": state.account_equity,
+        "buying_power": state.buying_power,
+        "account_equity_source": state.account_equity_source,
+        "account_equity_sync_status": state.sync_status,
         "open_positions": state.open_positions,
         "open_orders": state.open_orders,
         "remote_positions": remote_positions,
@@ -164,7 +198,7 @@ def _apply_portfolio_state_to_plans(session: Session, state: PortfolioState, set
         plan.capital_status = state.status
         plan.capital_reason = "" if state.status == "CAPITAL_AVAILABLE" else state.reason
         plan.available_cash_snapshot = state.available_cash
-        plan.max_new_position_value = state.available_cash * settings.max_symbol_position_pct if state.available_cash > 0 else 0
+        plan.max_new_position_value = state.account_equity * settings.max_symbol_position_pct if state.account_equity > 0 else 0
     session.commit()
 
 

@@ -32,6 +32,9 @@
   <article class="status-tile">
     <span>当前持仓</span><strong>{{ command.system.positions }} / {{ command.system.max_positions }}</strong><small>已有持仓优先管理</small>
   </article>
+  <a class="status-tile severity-{{ 'success' if command.system.account_equity else 'danger' }}" href="/risk">
+    <span>Futu 模拟账户权益</span><strong>{{ command.system.account_equity|money if command.system.account_equity else "未知" }}</strong><small>单笔风险 {{ command.system.risk_per_trade_pct|percent }} · 查看仓位控制</small>
+  </a>
   <article class="status-tile severity-{{ 'success' if command.system.allows_entry else 'danger' }}">
     <span>允许新开仓</span><strong>{{ "是" if command.system.allows_entry else "否" }}</strong><small>{{ command.system.stop_reason or "等待完整规则审批机会" }}</small>
   </article>

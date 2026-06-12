@@ -36,6 +36,9 @@ def test_read_only_sim_account_check_reports_all_connections(session):
     assert payload["positions_connected"] is True
     assert payload["open_orders_connected"] is True
     assert payload["remote_positions"] == 1
+    saved = portfolio_sync_status(session)
+    assert saved["account_equity"] == 100000
+    assert saved["account_equity_source"] == "FUTU_SIM_ACCOUNT"
 
 
 def test_available_portfolio_state_is_written_to_active_plans(session):
