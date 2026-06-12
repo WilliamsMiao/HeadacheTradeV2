@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh HeadacheTradeV2 market baseline before the US market opens
+
+[Timer]
+OnCalendar=Mon..Fri *-*-* 09:20:00 America/New_York
+Persistent=true
+AccuracySec=1min
+Unit=headachetrade-market-refresh.service
+
+[Install]
+WantedBy=timers.target

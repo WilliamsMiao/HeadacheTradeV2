@@ -31,6 +31,13 @@ def test_freshness_uses_real_database_update_times_and_next_schedule(session):
     assert result["battle"]["schedule"] == "每根 60 分钟 K 线完成后重新评级"
 
 
+def test_market_freshness_has_preopen_baseline_slot(session):
+    result = freshness_context(session, datetime(2026, 6, 12, 12, 0, tzinfo=UTC), {"market"})
+
+    assert result["market"]["next_at"] == datetime(2026, 6, 12, 13, 20)
+    assert "开盘前 10 分钟" in result["market"]["schedule"]
+
+
 def test_freshness_reports_missing_data_explicitly(session):
     result = freshness_context(session, datetime(2026, 6, 14, 12, 0, tzinfo=UTC))
 

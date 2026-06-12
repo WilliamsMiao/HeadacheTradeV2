@@ -48,7 +48,11 @@ def rules_approve_trade_plan(
         (realtime_context.get("volume_ok") is True, "REJECTED_BY_DATA", "实时成交量异常"),
         (realtime_context.get("short_trend_ok") is not None, "REJECTED_BY_DATA", "短周期趋势尚未完成校验"),
         (realtime_context.get("short_trend_ok") is True, "REJECTED_BY_PRICE", "短周期趋势已破坏"),
-        (market_state_available is True, "REJECTED_BY_DATA", "市场状态尚未完成校验"),
+        (
+            market_state_available is True,
+            "REJECTED_BY_DATA",
+            realtime_context.get("market_state_reason") or "今日市场风向标尚未完成刷新",
+        ),
         (realtime_context.get("market_state") != "RISK_OFF", "REJECTED_BY_MARKET", "市场处于风险关闭状态"),
         (_entry_time_allowed(settings), "REJECTED_BY_RISK", "当前处于禁止新开仓时间"),
     ]

@@ -19,6 +19,7 @@ def test_systemd_timers_use_new_york_time_and_expected_schedule():
     deploy_dir = Path(__file__).parents[1] / "deploy"
     daily = (deploy_dir / "headachetrade-daily.timer").read_text()
     intraday = (deploy_dir / "headachetrade-60m.timer").read_text()
+    market = (deploy_dir / "headachetrade-market-refresh.timer").read_text()
 
     assert "08:45:00 America/New_York" in daily
     assert "Persistent=true" in daily
@@ -26,6 +27,8 @@ def test_systemd_timers_use_new_york_time_and_expected_schedule():
     assert "16:05:00 America/New_York" in intraday
     assert intraday.count("OnCalendar=") == 7
     assert "Persistent=false" in intraday
+    assert "09:20:00 America/New_York" in market
+    assert "Persistent=true" in market
 
 
 def test_release_installs_and_enables_both_timers():
@@ -33,4 +36,5 @@ def test_release_installs_and_enables_both_timers():
 
     assert "headachetrade-daily.timer" in release_script
     assert "headachetrade-60m.timer" in release_script
-    assert "systemctl enable --now headachetrade-daily.timer headachetrade-60m.timer" in release_script
+    assert "headachetrade-market-refresh.timer" in release_script
+    assert "systemctl enable --now headachetrade-daily.timer headachetrade-market-refresh.timer headachetrade-60m.timer" in release_script

@@ -97,13 +97,15 @@ ln -sfn "${RELEASE_DIR}" "${CURRENT_LINK}"
 install -m 0644 deploy/headachetrade.service "/etc/systemd/system/${SERVICE_NAME}"
 install -m 0644 deploy/headachetrade-daily.service /etc/systemd/system/headachetrade-daily.service
 install -m 0644 deploy/headachetrade-daily.timer /etc/systemd/system/headachetrade-daily.timer
+install -m 0644 deploy/headachetrade-market-refresh.service /etc/systemd/system/headachetrade-market-refresh.service
+install -m 0644 deploy/headachetrade-market-refresh.timer /etc/systemd/system/headachetrade-market-refresh.timer
 install -m 0644 deploy/headachetrade-60m.service /etc/systemd/system/headachetrade-60m.service
 install -m 0644 deploy/headachetrade-60m.timer /etc/systemd/system/headachetrade-60m.timer
 install -m 0644 deploy/headachetrade-sim-loop.service /etc/systemd/system/headachetrade-sim-loop.service
 install -m 0644 deploy/headachetrade-sim-loop.timer /etc/systemd/system/headachetrade-sim-loop.timer
 systemctl daemon-reload
 systemctl enable "${SERVICE_NAME}"
-systemctl enable --now headachetrade-daily.timer headachetrade-60m.timer
+systemctl enable --now headachetrade-daily.timer headachetrade-market-refresh.timer headachetrade-60m.timer
 if ! grep -q '^ENABLE_SIM_TRADING=' "${ENV_DIR}/headachetrade.env"; then
   printf '\nENABLE_SIM_TRADING=true\nENABLE_REAL_TRADING=false\n' >>"${ENV_DIR}/headachetrade.env"
 fi
