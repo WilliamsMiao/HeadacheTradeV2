@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings
 from app.models import AuditLog, BattlePoolItem, CandidateStock, Position, SimOrder, StructureEvent, TradePlan
+from app.presentation import label_for
 from app.presentation_status import status_for
 from app.services.next_action import describe_position_next_action, describe_trade_plan_next_action
 from app.services.portfolio_manager import portfolio_sync_status
@@ -80,27 +81,33 @@ def plan_view_model(session: Session, plan: TradePlan, settings: Settings) -> di
     sync = portfolio_sync_status(session)
     capital_ok = sync.get("ok", False) and sync.get("status") == "CAPITAL_AVAILABLE"
     checks = [
-        ("当前价 >= 入场价", entry_ok, f"{current:.2f} / {entry:.2f}" if current and entry else "价格数据缺失"),
-        ("当前价 <= 禁止追价", chase_ok, f"{current:.2f} / {no_chase:.2f}" if current and no_chase else "禁止追价线未设置"),
-        ("计划状态 == TRIGGERED", plan.status == "TRIGGERED", f"当前状态：{plan.status}"),
-        ("模拟交易开启", settings.enable_sim_trading, "系统配置"),
-        ("真实交易关闭", not settings.enable_real_trading, "系统配置"),
-        ("价差正常", _validation_check(validation, "spread_available", validation.get("spread_pct") is not None and validation.get("spread_pct", 1) <= settings.max_spread_pct), _spread_detail(validation, settings)),
-        ("成交量正常", _validation_check(validation, "volume_available", validation.get("volume_ok") is True), _volume_detail(validation)),
-        ("短周期趋势未破坏", _validation_value(validation, "short_trend_ok"), validation.get("short_trend_reason") or "等待 60 分钟指标"),
-        ("大盘不是 RISK_OFF", _market_check(validation), f"最近校验：{validation.get('market_state') or '未知'}"),
-        ("当前时间允许开仓", _entry_time_allowed(settings), "按美东交易时段"),
-        ("资金可用", capital_ok, sync.get("reason") or sync.get("error") or "等待模拟账户同步"),
-        ("无同标的持仓", not has_position, "本地模拟持仓"),
-        ("无同标的未成交订单", not has_order, "本地模拟订单"),
+        _check("已经到达计划入场价", entry_ok, _entry_price_detail(current, entry)),
+        _check("当前价格仍适合入场", chase_ok, _no_chase_detail(current, no_chase)),
+        _check(
+            "系统已完成本轮实时确认",
+            plan.status == "TRIGGERED",
+            "实时条件已经确认，可以进入风控与资金审核。"
+            if plan.status == "TRIGGERED"
+            else f"计划目前处于“{status_for(plan.status).display_name}”，系统还没有完成本轮入场确认。",
+        ),
+        _check("模拟交易功能已开启", settings.enable_sim_trading, "关闭时系统只监控，不会提交模拟订单。"),
+        _check("真实交易保持关闭", not settings.enable_real_trading, "系统只允许模拟交易。"),
+        _check("买卖价差在可接受范围内", _validation_check(validation, "spread_available", validation.get("spread_pct") is not None and validation.get("spread_pct", 1) <= settings.max_spread_pct), _spread_detail(validation, settings)),
+        _check("当前成交活跃度满足要求", _validation_check(validation, "volume_available", validation.get("volume_ok") is True), _volume_detail(validation)),
+        _check("60 分钟短期走势没有转弱", _validation_value(validation, "short_trend_ok"), validation.get("short_trend_reason") or "等待最新 60 分钟指标确认。"),
+        _check("市场环境允许新增仓位", _market_check(validation), _market_detail(validation)),
+        _check("当前处于允许开仓的交易时段", _entry_time_allowed(settings), "系统按美东交易时段控制新开仓。"),
+        _check("模拟账户有足够可用资金", capital_ok, sync.get("reason") or sync.get("error") or "等待模拟账户完成资金同步。"),
+        _check("该股票目前没有重复持仓", not has_position, "已有持仓时不会重复开仓。"),
+        _check("该股票目前没有待成交订单", not has_order, "已有待成交订单时不会重复下单。"),
     ]
     price_ready = entry_ok and chase_ok
     block_reason = (
         plan.rules_reject_reason
         or plan.capital_reason
         or (sync.get("error") or sync.get("reason") if not sync.get("ok") else "")
-        or ("" if all(passed is True for _, passed, _ in checks) else next(
-            f"{label}：{detail}" for label, passed, detail in checks if passed is not True
+        or ("" if all(check["passed"] is True for check in checks) else next(
+            check["block_message"] for check in checks if check["passed"] is not True
         ))
     )
     return {
@@ -109,13 +116,51 @@ def plan_view_model(session: Session, plan: TradePlan, settings: Settings) -> di
         "next_action": describe_trade_plan_next_action(plan),
         "reason": plan.rules_reject_reason or plan.capital_reason or plan.reason,
         "price_gate_status": "价格条件已满足" if price_ready else "等待价格条件",
-        "validation_status": "已推进为 TRIGGERED" if plan.status == "TRIGGERED" else ("价格已到，等待 sim loop 推进" if price_ready else "等待实时校验"),
+        "validation_status": "实时确认已完成" if plan.status == "TRIGGERED" else ("价格已到，等待系统完成实时确认" if price_ready else "等待实时行情确认"),
         "rules_approval_status": status_for(plan.rules_approval_status).display_name if plan.rules_approval_status in {"ACTIVE"} else plan.rules_approval_status,
         "capital_status": plan.capital_status,
         "block_reason": block_reason,
         "checks": checks,
-        "summary_checks": [check for check in checks if check[1] is not True][:3],
+        "summary_checks": [check for check in checks if check["passed"] is not True][:3],
     }
+
+
+def _check(label: str, passed: bool | None, detail: str) -> dict[str, object]:
+    result = "条件已满足" if passed is True else "暂不满足" if passed is False else "等待确认"
+    return {
+        "label": label,
+        "passed": passed,
+        "result": result,
+        "detail": detail,
+        "block_message": f"{label}尚未满足。{detail}",
+    }
+
+
+def _entry_price_detail(current: float, entry: float) -> str:
+    if not current or not entry:
+        return "暂时没有完整的实时价格或计划入场价。"
+    if current >= entry:
+        return f"当前价 {current:.2f}，已经达到计划入场价 {entry:.2f}。"
+    return f"当前价 {current:.2f}，还需上涨至 {entry:.2f} 才进入计划入场区。"
+
+
+def _no_chase_detail(current: float, no_chase: float) -> str:
+    if not current:
+        return "暂时没有可用的实时价格。"
+    if not no_chase:
+        return "该计划尚未设置最高可接受入场价。"
+    if current <= no_chase:
+        return f"当前价 {current:.2f}，没有超过最高可接受入场价 {no_chase:.2f}。"
+    return f"当前价 {current:.2f} 已高于最高可接受入场价 {no_chase:.2f}，为避免追高，系统暂不入场。"
+
+
+def _market_detail(validation: dict) -> str:
+    state = validation.get("market_state")
+    if not validation or not validation.get("_is_fresh"):
+        return "最近两分钟没有新的市场环境校验结果。"
+    if validation.get("market_state_available") is not True:
+        return "市场基准数据暂不完整，系统无法确认是否适合新增仓位。"
+    return f"最近确认的市场环境为“{label_for(state) if state else '未知'}”。"
 
 
 def _priority_rank(priority_level: str) -> int:

@@ -36,8 +36,8 @@
         {% if item.block_reason %}<div class="blocking-reason"><strong>主阻塞原因</strong><p>{{ item.block_reason }}</p></div>{% endif %}
       </section>
       <details class="entry-checks" open>
-        <summary>完整入场检查</summary>
-        <ul>{% for label, passed, detail in item.checks %}<li class="{{ 'passed' if passed is sameas true else 'failed' if passed is sameas false else 'unknown' }}"><span>{{ label }}<small>{{ detail }}</small></span><strong>{{ "通过" if passed is sameas true else "未通过" if passed is sameas false else "尚未校验" }}</strong></li>{% endfor %}</ul>
+        <summary>系统为什么还没有入场？</summary>
+        <ul>{% for check in item.checks %}<li class="{{ 'passed' if check.passed is sameas true else 'failed' if check.passed is sameas false else 'unknown' }}"><span>{{ check.label }}<small>{{ check.detail }}</small></span><strong>{{ check.result }}</strong></li>{% endfor %}</ul>
       </details>
       <details class="score-details"><summary>来源结构与作战评分</summary><div class="plan-rules"><div><strong>日线 / 结构</strong><p>{{ plan.daily_state|label }} · {{ plan.structure_type|label }}</p></div><div><strong>作战评分</strong><p>{% if item.journey.battle %}{{ item.journey.battle.priority_level }} 级 · {{ "%.1f"|format(item.journey.battle.score) }} 分{% else %}来源记录不可用{% endif %}</p></div><div><strong>生成原因</strong><p>{{ plan.reason }}</p></div></div></details>
       <details class="score-details"><summary>查看持仓管理规则</summary><div class="plan-rules"><div><strong>移动止盈</strong><p>{{ plan.trailing_rule }}</p></div><div><strong>时间止损</strong><p>{{ plan.time_stop_rule }}</p></div><div><strong>失效条件</strong><p>{{ plan.invalid_condition }}</p></div></div></details>

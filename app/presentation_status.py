@@ -11,10 +11,10 @@ class StatusPresentation:
 
 
 STATUSES = {
-    "ACTIVE": StatusPresentation("ACTIVE", "等待入场", "计划有效，正在等待价格进入执行条件。", "等待价格到达入场价并完成实时校验。", "info"),
+    "ACTIVE": StatusPresentation("ACTIVE", "持续监控中", "计划仍然有效，系统正在等待价格和实时条件同时合适。", "继续监控价格和行情条件。", "info"),
     "PLANNED": StatusPresentation("PLANNED", "计划已生成", "结构价格框架已经生成，尚未进入实时执行。", "等待系统进入实时校验。", "neutral"),
     "ARMED": StatusPresentation("ARMED", "等待触发", "价格接近入场区，系统正在实时校验。", "若突破且未追高，将进入规则审批。", "info"),
-    "TRIGGERED": StatusPresentation("TRIGGERED", "已触发", "价格条件满足，正在执行规则审批。", "通过资金和风控审批后提交模拟限价单。", "success"),
+    "TRIGGERED": StatusPresentation("TRIGGERED", "价格已到，等待审核", "价格已经进入计划区间，系统正在检查风险、资金和重复订单。", "全部检查通过后提交模拟限价单。", "success"),
     "ORDER_SUBMITTED": StatusPresentation("ORDER_SUBMITTED", "订单已提交", "模拟限价单已发送至 Futu。", "等待成交或超时撤单。", "success"),
     "IN_POSITION": StatusPresentation("IN_POSITION", "模拟持仓中", "模拟订单已成交，系统优先管理持仓风险。", "监控止损、目标位与移动止盈。", "success"),
     "WAIT_PULLBACK": StatusPresentation("WAIT_PULLBACK", "等待回踩", "价格突破后偏离计划区。", "等待价格回踩后重新校验，不追单。", "warning"),
