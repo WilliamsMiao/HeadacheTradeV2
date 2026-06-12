@@ -1,0 +1,11 @@
+{% macro trade_journey(journey) %}
+<nav class="trade-journey" aria-label="交易链路">
+  <a class="{{ 'complete' if journey.candidate else 'pending' }}" href="{{ '/symbols/' ~ journey.plan.symbol if journey.candidate else '#' }}">候选</a>
+  <a class="{{ 'complete' if journey.structure else 'pending' }}" href="{{ '/structures' if journey.structure else '#' }}">结构</a>
+  <a class="{{ 'complete' if journey.battle else 'pending' }}" href="{{ '/battle-pool' if journey.battle else '#' }}">作战</a>
+  <a class="{{ 'current' if journey.current == 'plan' else 'complete' }}" href="/trade-plans#plan-{{ journey.plan.id }}">计划</a>
+  <a class="{{ 'current' if journey.current == 'order' else 'complete' if journey.order else 'pending' }}" href="{{ '/sim-orders#order-' ~ journey.order.id if journey.order else '#' }}">订单</a>
+  <a class="{{ 'current' if journey.current == 'position' else 'complete' if journey.position else 'pending' }}" href="{{ '/positions#position-' ~ journey.position.id if journey.position else '#' }}">持仓</a>
+  <a class="{{ 'complete' if journey.position and journey.position.status != 'OPEN' else 'pending' }}" href="/journal">复盘</a>
+</nav>
+{% endmacro %}

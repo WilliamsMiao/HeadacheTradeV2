@@ -28,7 +28,8 @@
     <table>
       <thead><tr><th>股票</th><th>日线状态</th><th>60 分钟结构</th><th>阶段</th><th>时间</th><th>确认位</th><th>失效位</th><th>建议动作</th><th>原因</th></tr></thead>
       <tbody>
-        {% for event in events %}
+        {% for item in events %}
+        {% set event = item.record %}
         <tr>
           <td class="symbol-cell"><a href="/symbols/{{ event.symbol }}">{{ event.symbol }}</a></td>
           <td><span class="state">{{ daily_states[event.symbol].state|label if event.symbol in daily_states else "数据不足" }}</span></td>
@@ -37,8 +38,8 @@
           <td>{{ event.event_ts|dt }}</td>
           <td>{{ event.confirm_level|price }}</td>
           <td>{{ event.invalidation_level|price }}</td>
-          <td>{{ event.suggested_action or "等待结构评分" }}</td>
-          <td><p class="reason-short" title="{{ event.reason|reason }}">{{ event.reason|reason(72) }}</p></td>
+          <td>{% if item.plan %}<a class="text-link" href="/trade-plans#plan-{{ item.plan.id }}">已生成计划</a>{% elif item.battle %}<a class="text-link" href="/battle-pool">已入作战池</a>{% else %}{{ event.suggested_action or "等待结构评分" }}{% endif %}</td>
+          <td><p class="reason-short" title="{{ event.reason|reason }}">{{ event.reason|reason(72) }}</p><small>{% if item.plan %}后续：交易计划{% elif item.battle %}后续：作战评分{% elif event.invalidated %}后续：结构已失效{% else %}后续：等待评分{% endif %}</small></td>
         </tr>
         {% else %}
         <tr><td colspan="9"><div class="empty"><strong>暂无{{ "当前候选" if selected_scope == "active" else "历史" }}结构事件</strong><span>{% if selected_scope == "active" %}先生成候选池，再更新日线与 60 分钟行情并扫描结构。{% else %}数据库中还没有可供复盘的结构记录。{% endif %}</span></div></td></tr>

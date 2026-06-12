@@ -1,8 +1,10 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import BattlePoolItem, CandidateStock, Position, SimOrder, StructureEvent, TradePlan, TradingState
+from app.config import Settings
+from app.models import AuditLog, BattlePoolItem, CandidateStock, Position, SimOrder, StructureEvent, TradePlan, TradingState
 from app.presentation_status import status_for
+from app.services.command_center import plan_view_model
 from app.services.next_action import (
     describe_battle_next_action,
     describe_candidate_next_action,
@@ -66,26 +68,119 @@ def battle_view_models(session: Session, items: list[BattlePoolItem]) -> list[di
     return output
 
 
-def trade_plan_groups(plans: list[TradePlan]) -> list[dict]:
+def trade_plan_groups(session: Session, plans: list[TradePlan], settings: Settings) -> list[dict]:
     groups = [
-        ("可执行机会", {"ACTIVE", "PLANNED", "ARMED"}),
-        ("已触发", {"TRIGGERED", "ORDER_SUBMITTED"}),
-        ("已持仓", {"IN_POSITION"}),
+        ("待触发计划", {"ACTIVE", "PLANNED", "ARMED"}),
+        ("已触发待处理", {"TRIGGERED", "ORDER_SUBMITTED"}),
+        ("持仓中", {"IN_POSITION"}),
         ("等待回踩", {"WAIT_PULLBACK"}),
-        ("资金不足", {"WAITLIST", "MISSED_BY_CAPITAL"}),
-        ("禁止追价", {"NO_CHASE"}),
-        ("已拒绝", {"BLOCKED", "PAUSED"}),
-        ("已失效", {"INVALIDATED", "EXPIRED"}),
+        ("执行阻塞", {"WAITLIST", "MISSED_BY_CAPITAL", "NO_CHASE", "BLOCKED", "PAUSED"}),
+        ("失效计划", {"INVALIDATED", "EXPIRED"}),
     ]
     result = []
     for title, statuses in groups:
-        items = [
-            {"record": plan, "status": status_for(plan.status), "next_action": describe_trade_plan_next_action(plan)}
-            for plan in plans if plan.status in statuses
-        ]
+        items = [trade_plan_view_model(session, plan, settings) for plan in plans if plan.status in statuses]
         if items:
             result.append({"title": title, "items": items})
     return result
+
+
+def trade_plan_view_model(session: Session, plan: TradePlan, settings: Settings) -> dict:
+    item = plan_view_model(session, plan, settings)
+    item.update(_journey_for_plan(session, plan))
+    item["orders"] = list(
+        session.scalars(select(SimOrder).where(SimOrder.trade_plan_id == plan.id).order_by(SimOrder.submitted_at.desc()))
+    )
+    item["position"] = session.scalar(
+        select(Position).where(Position.source_trade_plan_id == plan.id).order_by(Position.updated_at.desc()).limit(1)
+    )
+    item["validation_logs"] = list(
+        session.scalars(
+            select(AuditLog)
+            .where(AuditLog.subject_type == "TradePlan", AuditLog.subject_id == plan.id)
+            .order_by(AuditLog.created_at.desc())
+            .limit(8)
+        )
+    )
+    return item
+
+
+def structure_view_models(session: Session, events: list[StructureEvent]) -> list[dict]:
+    output = []
+    for event in events:
+        battle = session.scalar(select(BattlePoolItem).where(BattlePoolItem.source_structure_id == event.id))
+        plan = session.scalar(
+            select(TradePlan).where(TradePlan.source_structure_id == event.id).order_by(TradePlan.updated_at.desc()).limit(1)
+        )
+        output.append({"record": event, "battle": battle, "plan": plan})
+    return output
+
+
+def journal_view_models(session: Session) -> list[dict]:
+    plans = list(session.scalars(select(TradePlan).order_by(TradePlan.updated_at.desc()).limit(100)))
+    output = []
+    for plan in plans:
+        orders = list(
+            session.scalars(select(SimOrder).where(SimOrder.trade_plan_id == plan.id).order_by(SimOrder.submitted_at))
+        )
+        position = session.scalar(
+            select(Position).where(Position.source_trade_plan_id == plan.id).order_by(Position.updated_at.desc()).limit(1)
+        )
+        logs = list(
+            session.scalars(
+                select(AuditLog)
+                .where(AuditLog.symbol == plan.symbol)
+                .order_by(AuditLog.created_at.desc())
+                .limit(12)
+            )
+        )
+        output.append(
+            {
+                "plan": plan,
+                "orders": orders,
+                "position": position,
+                "logs": logs,
+                "outcome": _journal_outcome(plan, position, orders),
+                **_journey_for_plan(session, plan),
+            }
+        )
+    return output
+
+
+def _journey_for_plan(session: Session, plan: TradePlan) -> dict:
+    candidate = session.scalar(select(CandidateStock).where(CandidateStock.symbol == plan.symbol))
+    structure = session.get(StructureEvent, plan.source_structure_id)
+    battle = session.get(BattlePoolItem, plan.battle_pool_id)
+    order = session.scalar(
+        select(SimOrder).where(SimOrder.trade_plan_id == plan.id).order_by(SimOrder.submitted_at.desc()).limit(1)
+    )
+    position = session.scalar(
+        select(Position).where(Position.source_trade_plan_id == plan.id).order_by(Position.updated_at.desc()).limit(1)
+    )
+    current = "position" if position else "order" if order else "plan"
+    return {
+        "journey": {
+            "candidate": candidate,
+            "structure": structure,
+            "battle": battle,
+            "plan": plan,
+            "order": order,
+            "position": position,
+            "current": current,
+        }
+    }
+
+
+def _journal_outcome(plan: TradePlan, position: Position | None, orders: list[SimOrder]) -> str:
+    if position and position.status == "OPEN":
+        return f"持仓中，当前 {position.current_r:.2f}R"
+    if position:
+        return position.exit_reason or f"持仓已结束，最终 {position.current_r:.2f}R"
+    if orders:
+        return f"最近订单：{status_for(orders[-1].status).display_name}"
+    if plan.status in {"INVALIDATED", "EXPIRED"}:
+        return "计划失效，未形成持仓"
+    return "计划仍在观察或等待执行"
 
 
 def position_view_models(session: Session, positions: list[Position]) -> list[dict]:

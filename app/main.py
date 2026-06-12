@@ -76,8 +76,10 @@ from app.providers.futu_provider import FutuProvider
 from app.services.view_models import (
     battle_view_models,
     candidate_view_models,
+    journal_view_models,
     order_view_models,
     position_view_models,
+    structure_view_models,
     trade_plan_groups,
 )
 from app.presentation import (
@@ -277,7 +279,7 @@ def structures_page(request: Request, scope: str = "active", session: Session = 
     return templates.TemplateResponse(
         request,
         "structures.html",
-        {"events": events, "daily_states": daily_states, "selected_scope": scope},
+        {"events": structure_view_models(session, events), "daily_states": daily_states, "selected_scope": scope},
     )
 
 
@@ -302,7 +304,11 @@ def trade_plans_page(request: Request, session: Session = Depends(get_session)):
             .order_by(_trade_plan_priority_order(), TradePlan.updated_at.desc())
         )
     )
-    return templates.TemplateResponse(request, "trade_plans.html", {"plans": plans, "groups": trade_plan_groups(plans)})
+    return templates.TemplateResponse(
+        request,
+        "trade_plans.html",
+        {"plans": plans, "groups": trade_plan_groups(session, plans, get_settings())},
+    )
 
 
 @app.get("/api/trade-plans/prices")
@@ -330,8 +336,13 @@ def positions_page(request: Request, session: Session = Depends(get_session)):
 
 @app.get("/journal", response_class=HTMLResponse)
 def journal_page(request: Request, session: Session = Depends(get_session)):
+    return templates.TemplateResponse(request, "journal.html", {"trades": journal_view_models(session)})
+
+
+@app.get("/audit-logs", response_class=HTMLResponse)
+def audit_logs_page(request: Request, session: Session = Depends(get_session)):
     logs = list(session.scalars(select(AuditLog).order_by(AuditLog.created_at.desc()).limit(500)))
-    return templates.TemplateResponse(request, "journal.html", {"logs": logs})
+    return templates.TemplateResponse(request, "audit_logs.html", {"logs": logs})
 
 
 @app.get("/market", response_class=HTMLResponse)

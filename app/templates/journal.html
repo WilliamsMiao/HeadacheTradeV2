@@ -1,19 +1,21 @@
 {% extends "base.html" %}
+{% from "_journey.html" import trade_journey %}
 {% block content %}
 <header class="page-header compact">
-  <div><h1>交易日志</h1><p>按时间还原实时校验、规则审批、资金分配、订单和持仓管理过程。</p></div>
+  <div><h1>交易复盘</h1><p>按交易计划聚合来源结构、执行过程、订单、持仓结果和关键系统动作。</p></div>
+  <div class="header-actions"><a class="button-secondary" href="/audit-logs">查看系统审计</a></div>
 </header>
-<section class="panel journal-panel">
-  <div class="panel-head"><div class="panel-head-copy"><h2>最近系统动作</h2><span>失败和自动拒绝同样保留可追踪原因</span></div><small>{{ logs|length }} 条</small></div>
-  <ol class="action-timeline journal-timeline">
-  {% for log in logs %}
-    <li>
-      <time>{{ log.created_at|system_dt }}</time><span class="timeline-dot"></span>
-      <div><strong>{{ log.action|label }}{% if log.symbol %} · {{ log.symbol }}{% endif %}</strong><span class="state">{{ log.status|label }}</span><p>{{ log.reason or "系统已完成该步骤" }}</p></div>
-    </li>
+<div class="journal-trade-list">
+  {% for trade in trades %}
+  {% set plan = trade.plan %}
+  <article class="panel journal-trade">
+    <header><div><span class="priority priority-{{ plan.priority_level|lower }}">{{ plan.priority_level }}</span><h2>{{ plan.symbol }} · {{ plan.direction|label }}</h2><small>{{ plan.structure_type|label }} · 计划 {{ plan.status|label }}</small></div><strong>{{ trade.outcome }}</strong></header>
+    {{ trade_journey(trade.journey) }}
+    <dl class="metric-grid"><div><dt>计划入场</dt><dd>{{ plan.breakout_entry_price|price }}</dd></div><div><dt>硬止损</dt><dd>{{ plan.stop_price|price }}</dd></div><div><dt>目标 1 / 2</dt><dd>{{ plan.target_1|price }} / {{ plan.target_2|price }}</dd></div><div><dt>订单数量</dt><dd>{{ trade.orders|length }}</dd></div></dl>
+    <details class="score-details"><summary>查看交易过程</summary><ol class="compact-timeline">{% for log in trade.logs %}<li><time>{{ log.created_at|system_dt }}</time><span>{{ log.action|label }} · {{ log.reason or log.status|label }}</span></li>{% else %}<li>暂无关联动作</li>{% endfor %}</ol></details>
+  </article>
   {% else %}
-    <li class="timeline-empty">暂无自动交易日志。运行扫描和模拟交易循环后，决策过程会显示在这里。</li>
+  <div class="panel empty-page"><div class="empty"><strong>暂无可复盘交易计划</strong><span>生成计划后，系统会在这里聚合订单、持仓和结果。</span></div></div>
   {% endfor %}
-  </ol>
-</section>
+</div>
 {% endblock %}

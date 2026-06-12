@@ -16,7 +16,7 @@
 <section class="panel">
   <div class="panel-head"><div class="panel-head-copy"><h2>{{ selected_pool|label if selected_pool else "全部候选" }}</h2><span>固定展示漏斗状态、未进入下一层原因和下一步</span></div><small>{{ items|length }} 支</small></div>
   <div class="table-wrap"><table class="decision-table">
-    <thead><tr><th>排名</th><th>股票</th><th>观察分</th><th>候选类型 / 标签</th><th>分项</th><th>漏斗状态</th><th>未进入下一层原因</th><th>下一步</th></tr></thead>
+    <thead><tr><th>排名</th><th>股票</th><th>观察分</th><th>候选类型 / 标签</th><th>当前链路</th><th>漏斗状态</th><th>未进入下一层原因</th><th>下一步</th></tr></thead>
     <tbody>
     {% for item in items %}
     {% set record = item.record %}
@@ -25,7 +25,7 @@
         <td class="symbol-cell"><a href="/symbols/{{ record.symbol }}">{{ record.symbol }}</a><small>{{ record.name }}</small></td>
         <td><strong>{{ "%.1f"|format(record.rank_score) }}</strong></td>
         <td class="tag-cell">{% for pool in record.pool_types_json|json_list %}<span class="state">{{ pool|label }}</span>{% endfor %}<br>{% for tag in record.tags_json|json_list %}<span class="tag">{{ tag|label }}</span>{% endfor %}</td>
-        <td><small>流动性 {{ "%.1f"|format(record.liquidity_score) }}<br>热度 {{ "%.1f"|format(record.heat_score) }}<br>技术 {{ "%.1f"|format(record.technical_score) }}</small></td>
+        <td><div class="mini-journey"><span class="complete">观察</span><a class="{{ 'complete' if item.structure else 'pending' }}" href="{{ '/structures' if item.structure else '#' }}">结构</a><a class="{{ 'complete' if item.battle else 'pending' }}" href="{{ '/battle-pool' if item.battle else '#' }}">作战</a><a class="{{ 'complete' if item.plan else 'pending' }}" href="{{ '/trade-plans#plan-' ~ item.plan.id if item.plan else '#' }}">计划</a></div><small>流动性 {{ "%.1f"|format(record.liquidity_score) }} · 热度 {{ "%.1f"|format(record.heat_score) }} · 技术 {{ "%.1f"|format(record.technical_score) }}</small></td>
         <td><span class="state status-{{ item.funnel_status|lower }}">{{ item.funnel_status|label }}</span></td>
         <td><p class="reason-short" title="{{ item.reason }}">{{ item.reason }}</p></td>
         <td class="next-action-cell">{{ item.next_action }}</td>
