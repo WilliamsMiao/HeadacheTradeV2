@@ -48,10 +48,10 @@ def test_risk_page_groups_settings_in_chinese():
     client = authenticated_client()
     response = client.get("/risk")
     assert response.status_code == 200
-    assert "账户风险" in response.text
-    assert "剧本调整" in response.text
-    assert "仓位限制" in response.text
-    assert "冷却机制" in response.text
+    assert "风控与仓位控制" in response.text
+    assert "Futu 模拟账户权益" in response.text
+    assert 'name="account_equity"' not in response.text
+    assert "仓位计算示例" in response.text
 
 
 def test_structures_page_defaults_to_active_candidates_and_keeps_history_separate():

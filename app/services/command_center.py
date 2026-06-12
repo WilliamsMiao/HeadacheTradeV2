@@ -41,6 +41,22 @@ def command_center_payload(session: Session, settings: Settings) -> dict:
             SimOrder.side == "BUY",
         )
     ) or 0
+    portfolio_sync = portfolio_sync_status(session)
+    equity_ok = (
+        portfolio_sync.get("ok") is True
+        and portfolio_sync.get("account_equity_source") == "FUTU_SIM_ACCOUNT"
+        and portfolio_sync.get("account_equity_sync_status") == "OK"
+        and float(portfolio_sync.get("account_equity") or 0) > 0
+    )
+    allows_entry = settings.enable_sim_trading and today_orders < settings.max_daily_new_trades and equity_ok
+    if not settings.enable_sim_trading:
+        stop_reason = "模拟交易总开关关闭"
+    elif not equity_ok:
+        stop_reason = "无法读取 Futu 模拟账户权益"
+    elif today_orders >= settings.max_daily_new_trades:
+        stop_reason = "已达到今日最大新开仓次数"
+    else:
+        stop_reason = ""
     return {
         "system": {
             "sim_mode": "运行中" if settings.enable_sim_trading else "已停止",
@@ -50,8 +66,11 @@ def command_center_payload(session: Session, settings: Settings) -> dict:
             "max_new_trades": settings.max_daily_new_trades,
             "positions": len(positions),
             "max_positions": settings.max_positions,
-            "allows_entry": settings.enable_sim_trading and today_orders < settings.max_daily_new_trades,
-            "stop_reason": "" if settings.enable_sim_trading else "模拟交易总开关关闭",
+            "allows_entry": allows_entry,
+            "stop_reason": stop_reason,
+            "account_equity": float(portfolio_sync.get("account_equity") or 0),
+            "equity_updated_at": portfolio_sync.get("updated_at"),
+            "risk_per_trade_pct": settings.risk_per_trade_pct,
         },
         "positions_vm": [
             {"record": position, "next_action": describe_position_next_action(position)}
@@ -61,7 +80,7 @@ def command_center_payload(session: Session, settings: Settings) -> dict:
         "blocked": blocked[:8],
         "funnel": funnel,
         "timeline": logs,
-        "portfolio_sync": portfolio_sync_status(session),
+        "portfolio_sync": portfolio_sync,
     }
 
 

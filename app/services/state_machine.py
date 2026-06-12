@@ -7,6 +7,7 @@ from app.domain import DAILY, ENTRY_TRENDS, STRUCTURE_TIMEFRAME, TRADEABLE_MARKE
 from app.models import Indicator, KLine, Position, StateTransitionLog, StructureEvent, TradeSignal, TradingState
 from app.services.corrections import entry_trigger_failure_reason, reconcile_pending_entry
 from app.services.entry_trigger import EntryTriggerEvaluation, evaluate_15m_trend_resume
+from app.services.portfolio_manager import portfolio_sync_status
 from app.services.risk import (
     calculate_position_size,
     calculate_structure_stop,
@@ -241,7 +242,15 @@ def _create_entry_candidate(
             "缺少 60 分钟结构低点或对应 ATR，不允许生成入场建议",
         )
         return
-    risk = calculate_position_size(config, trigger.trigger_price, structure_stop.stop_price, market_state, script)
+    portfolio = portfolio_sync_status(session)
+    risk = calculate_position_size(
+        config,
+        trigger.trigger_price,
+        structure_stop.stop_price,
+        market_state,
+        script,
+        account_equity=float(portfolio.get("account_equity") or 0),
+    )
     if risk is None:
         _transition(session, record, "WAIT_15M_TRIGGER", "risk calculation failed or stop unavailable", "无清晰止损位，不允许生成入场建议")
         return

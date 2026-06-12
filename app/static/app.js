@@ -342,20 +342,69 @@ document.querySelectorAll("[data-reject]").forEach((button) => {
 
 const riskForm = document.getElementById("risk-form");
 if (riskForm) {
+  const presets = {
+    conservative: { max_positions: 1, risk_per_trade_pct: 0.0025, max_symbol_position_pct: 0.25, max_daily_new_trades: 2, max_daily_loss_pct: 0.008, max_consecutive_losses: 2, force_intraday_exit: true, enable_overnight_hold: false },
+    standard: { max_positions: 2, risk_per_trade_pct: 0.005, max_symbol_position_pct: 0.4, max_daily_new_trades: 3, max_daily_loss_pct: 0.015, max_consecutive_losses: 3, force_intraday_exit: true, enable_overnight_hold: false },
+    aggressive: { max_positions: 3, risk_per_trade_pct: 0.01, max_symbol_position_pct: 0.5, max_daily_new_trades: 5, max_daily_loss_pct: 0.03, max_consecutive_losses: 3, force_intraday_exit: false, enable_overnight_hold: true },
+  };
+  const money = (value) => Number.isFinite(value) ? `$${value.toLocaleString("zh-CN", { maximumFractionDigits: 2 })}` : "-";
+  const updateRiskPreview = () => {
+    const equity = Number.parseFloat(riskForm.dataset.accountEquity || "0");
+    const riskPct = Number.parseFloat(riskForm.elements.risk_per_trade_pct.value || "0");
+    const positionPct = Number.parseFloat(riskForm.elements.max_symbol_position_pct.value || "0");
+    const entry = Number.parseFloat(riskForm.querySelector("[data-example-entry]").value || "0");
+    const stop = Number.parseFloat(riskForm.querySelector("[data-example-stop]").value || "0");
+    const riskPerShare = entry - stop;
+    const allowedLoss = equity * riskPct;
+    const sharesByRisk = riskPerShare > 0 ? Math.floor(allowedLoss / riskPerShare) : 0;
+    const sharesByCap = entry > 0 ? Math.floor((equity * positionPct) / entry) : 0;
+    const shares = Math.max(0, Math.min(sharesByRisk, sharesByCap));
+    riskForm.querySelector("[data-risk-percent]").textContent = `${(riskPct * 100).toFixed(2)}%`;
+    riskForm.querySelector("[data-risk-loss]").textContent = money(allowedLoss);
+    riskForm.querySelector("[data-position-percent]").textContent = `${(positionPct * 100).toFixed(0)}%`;
+    riskForm.querySelector("[data-position-limit]").textContent = money(equity * positionPct);
+    riskForm.querySelector("[data-example-risk]").textContent = riskPerShare > 0 ? money(riskPerShare) : "止损价必须低于入场价";
+    riskForm.querySelector("[data-example-loss]").textContent = money(allowedLoss);
+    riskForm.querySelector("[data-example-shares]").textContent = shares ? `${shares} 股` : "-";
+    riskForm.querySelector("[data-example-value]").textContent = shares ? money(shares * entry) : "-";
+    riskForm.querySelector("[data-example-capped]").textContent = sharesByCap < sharesByRisk ? "是，已按上限压缩" : "否";
+  };
+  riskForm.addEventListener("input", updateRiskPreview);
+  document.querySelectorAll("[data-risk-preset]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const preset = presets[button.dataset.riskPreset];
+      if (!preset) return;
+      if (button.dataset.riskPreset === "aggressive" && !window.confirm("激进测试模式仅适用于模拟盘，会显著放大风险。确认填入？")) return;
+      Object.entries(preset).forEach(([key, value]) => {
+        const input = riskForm.elements[key];
+        if (!input) return;
+        if (input.type === "checkbox") input.checked = value;
+        else input.value = value;
+      });
+      updateRiskPreview();
+      setFormFeedback(riskForm, "模板已填入，保存后才会生效", "success");
+    });
+  });
+  updateRiskPreview();
   riskForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const formData = new FormData(riskForm);
     const payload = {};
     const button = riskForm.querySelector("button[type='submit']");
     setFormFeedback(riskForm, "");
-    for (const [key, value] of formData.entries()) {
-      payload[key] = key.includes("positions") || key.includes("days") ? Number.parseInt(value, 10) : Number.parseFloat(value);
-    }
+    ["risk_per_trade_pct", "max_symbol_position_pct", "max_daily_loss_pct"].forEach((key) => { payload[key] = Number.parseFloat(riskForm.elements[key].value); });
+    ["max_positions", "max_daily_new_trades", "max_consecutive_losses", "no_new_entry_before_minutes_after_open", "no_new_entry_before_close_minutes"].forEach((key) => { payload[key] = Number.parseInt(riskForm.elements[key].value, 10); });
+    payload.force_intraday_exit = riskForm.elements.force_intraday_exit.checked;
+    payload.enable_overnight_hold = riskForm.elements.enable_overnight_hold.checked;
+    payload.reason = String(formData.get("reason") || "");
+    if (payload.risk_per_trade_pct > 0.02 && !window.confirm("单笔风险超过 2%，属于高风险配置。确认继续保存？")) return;
+    if ((payload.max_positions > 5 || payload.max_symbol_position_pct > 0.5 || payload.max_daily_loss_pct > 0.05) && !window.confirm("当前配置包含高风险参数。确认继续保存？")) return;
     setButtonLoading(button, true);
     try {
       await postJson("/api/risk", payload);
       setFormFeedback(riskForm, "风控参数已保存", "success");
       showToast("风控参数已保存", "success");
+      window.setTimeout(() => window.location.reload(), 700);
     } catch (error) {
       setFormFeedback(riskForm, error.message, "error");
       showToast(error.message, "error");

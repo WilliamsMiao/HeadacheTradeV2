@@ -2,7 +2,7 @@ from datetime import date, datetime, timedelta
 
 from sqlalchemy import select
 
-from app.models import Indicator, KLine, Position, StateTransitionLog, StructureEvent, TradeSignal, TradingState
+from app.models import Indicator, KLine, Position, StateTransitionLog, StructureEvent, SystemConfig, TradeSignal, TradingState
 from app.services.state_machine import advance_state_machine
 
 
@@ -20,6 +20,10 @@ def test_cooldown_blocks_entry(session):
 
 
 def _seed_entry_context(session, *, trigger_ready: bool) -> StructureEvent:
+    session.add(SystemConfig(
+        key="portfolio_sync_status",
+        value='{"ok":true,"account_equity":100000,"account_equity_source":"FUTU_SIM_ACCOUNT","account_equity_sync_status":"OK"}',
+    ))
     base = datetime(2026, 6, 8, 9, 30)
     for index in range(10):
         ts = base - timedelta(days=10 - index)

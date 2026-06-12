@@ -21,6 +21,7 @@ from app.services.pipeline_lock import PipelineBusyError, pipeline_lock
 from app.services.sim_loop import run_sim_loop
 from app.providers.futu_trade_provider import FutuTradeProvider
 from app.services.portfolio_manager import check_sim_account_connection
+from app.services.risk_control import effective_risk_settings
 
 
 COMMANDS = (
@@ -68,6 +69,7 @@ def main() -> None:
     try:
         with pipeline_lock():
             with SessionLocal() as session:
+                settings = effective_risk_settings(session, settings)
                 if args.command == "init-db":
                     payload = {"status": "ok"}
                 elif args.command == "screen-market":
