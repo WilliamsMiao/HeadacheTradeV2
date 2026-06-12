@@ -133,6 +133,7 @@
       <h2>运行诊断</h2>
       <span id="opend-message">{{ message }}</span>
     </div>
+    <button data-opend-diagnostics data-loading-text="正在读取" class="secondary">读取诊断日志</button>
   </div>
   <div class="opend-status" id="opend-status">
     <dl class="metric-grid">
@@ -141,7 +142,7 @@
       <div><dt>服务自启</dt><dd>{{ status.service_enabled or "unknown" }}</dd></div>
       <div><dt>操作结果</dt><dd>{{ "正常" if status.ok else "异常" }}</dd></div>
     </dl>
-    <pre class="log-box">{{ status.recent_log or "暂无 OpenD 日志。" }}</pre>
+    <pre class="log-box">{{ status.recent_log or "诊断日志按需读取，避免阻塞页面加载。" }}</pre>
   </div>
 </section>
 {% endblock %}
