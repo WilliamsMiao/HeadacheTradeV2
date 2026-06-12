@@ -20,18 +20,23 @@
       <span>HeadacheTradeV2</span>
     </a>
     <nav aria-label="主导航">
+      <span class="nav-group-label">交易作战</span>
       <a href="/" {% if request.url.path == "/" %}aria-current="page"{% endif %}>作战台</a>
       <a href="/positions" {% if request.url.path == "/positions" %}aria-current="page"{% endif %}>模拟持仓</a>
       <a href="/trade-plans" {% if request.url.path == "/trade-plans" %}aria-current="page"{% endif %}>交易计划</a>
-      <a href="/battle-pool" {% if request.url.path == "/battle-pool" %}aria-current="page"{% endif %}>结构作战池</a>
-      <a href="/candidates" {% if request.url.path == "/candidates" %}aria-current="page"{% endif %}>候选观察池</a>
       <a href="/sim-orders" {% if request.url.path == "/sim-orders" %}aria-current="page"{% endif %}>模拟订单</a>
       <a href="/journal" {% if request.url.path == "/journal" %}aria-current="page"{% endif %}>交易复盘</a>
-      <a href="/audit-logs" {% if request.url.path == "/audit-logs" %}aria-current="page"{% endif %}>系统审计</a>
+
+      <span class="nav-group-label">机会来源</span>
+      <a href="/candidates" {% if request.url.path == "/candidates" %}aria-current="page"{% endif %}>候选观察池</a>
       <a href="/structures" {% if request.url.path == "/structures" %}aria-current="page"{% endif %}>结构事件</a>
+      <a href="/battle-pool" {% if request.url.path == "/battle-pool" %}aria-current="page"{% endif %}>结构作战池</a>
       <a href="/market" {% if request.url.path == "/market" %}aria-current="page"{% endif %}>市场风向标</a>
+
+      <span class="nav-group-label">系统控制</span>
       <a href="/risk" {% if request.url.path == "/risk" %}aria-current="page"{% endif %}>风控与仓位</a>
       <a href="/opend" {% if request.url.path == "/opend" %}aria-current="page"{% endif %}>OpenD 管理</a>
+      <a href="/audit-logs" {% if request.url.path == "/audit-logs" %}aria-current="page"{% endif %}>系统审计</a>
     </nav>
     <div class="nav-footer">
       <button data-logout>退出登录</button>

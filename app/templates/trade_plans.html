@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "_journey.html" import trade_journey %}
 {% from "_freshness.html" import freshness_bar %}
+{% from "_components.html" import status_badge, reason_alert, diagnostic_checklist %}
 {% block content %}
 <header class="page-header compact">
   <div><h1>交易计划详情</h1><p>交易计划的权威页面：完整展示来源、价格、实时校验、规则审批、资金状态、订单和持仓链路。</p><small class="live-price-status" data-live-price-status>正在连接 OpenD 获取实时价</small></div>
@@ -16,7 +17,7 @@
     <article class="trade-plan severity-{{ item.status.severity }}" id="plan-{{ plan.id }}">
       <header class="trade-plan-head">
         <div><span class="priority priority-{{ plan.priority_level|lower }}">{{ plan.priority_level }}</span><h3>{{ plan.symbol }} · {{ plan.name }}</h3><small>{{ plan.direction|label }} · {{ plan.structure_type|label }}</small></div>
-        <div class="plan-status"><strong>{{ item.status.display_name }}</strong><small>{{ item.status.description }}</small></div>
+        <div class="plan-status">{{ status_badge(item.status.display_name, item.status.severity) }}<small>{{ item.status.description }}</small></div>
       </header>
       {{ trade_journey(item.journey) }}
       <dl class="plan-levels compact-levels">
@@ -35,11 +36,11 @@
           <span>{{ item.price_gate_status }}</span><span>{{ item.validation_status }}</span>
           <span>规则审批：{{ item.rules_approval_status|label }}</span><span>资金：{{ item.capital_status|label }}</span>
         </div>
-        {% if item.block_reason %}<div class="blocking-reason"><strong>主阻塞原因</strong><p>{{ item.block_reason }}</p></div>{% endif %}
+        {% if item.block_reason %}{{ reason_alert("主阻塞原因", item.block_reason, "warning") }}{% endif %}
       </section>
       <details class="entry-checks" open>
         <summary>系统为什么还没有入场？</summary>
-        <ul>{% for check in item.checks %}<li class="{{ 'passed' if check.passed is sameas true else 'failed' if check.passed is sameas false else 'unknown' }}"><span>{{ check.label }}<small>{{ check.detail }}</small></span><strong>{{ check.result }}</strong></li>{% endfor %}</ul>
+        {{ diagnostic_checklist(item.checks) }}
       </details>
       <details class="score-details"><summary>来源结构与作战评分</summary><div class="plan-rules"><div><strong>日线 / 结构</strong><p>{{ plan.daily_state|label }} · {{ plan.structure_type|label }}</p></div><div><strong>作战评分</strong><p>{% if item.journey.battle %}{{ item.journey.battle.priority_level }} 级 · {{ "%.1f"|format(item.journey.battle.score) }} 分{% else %}来源记录不可用{% endif %}</p></div><div><strong>生成原因</strong><p>{{ plan.reason }}</p></div></div></details>
       <details class="score-details"><summary>查看持仓管理规则</summary><div class="plan-rules"><div><strong>移动止盈</strong><p>{{ plan.trailing_rule }}</p></div><div><strong>时间止损</strong><p>{{ plan.time_stop_rule }}</p></div><div><strong>失效条件</strong><p>{{ plan.invalid_condition }}</p></div></div></details>
