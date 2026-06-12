@@ -84,6 +84,7 @@ from app.services.view_models import (
     trade_plan_groups,
 )
 from app.services.terminal_api import (
+    kline_payload,
     orders_payload,
     positions_payload,
     response_envelope,
@@ -394,6 +395,30 @@ def sim_orders_api(symbol: str = "", session: Session = Depends(get_session)):
     orders = orders_payload(session, symbol)
     synced_at = max((order["submitted_at"] for order in orders if order["submitted_at"]), default=None)
     return response_envelope(orders, source="FUTU_SIM_ACCOUNT", synced_at=synced_at)
+
+
+@app.get("/api/kline")
+def kline_api(
+    symbol: str,
+    timeframe: str = "60m",
+    limit: int = 300,
+    session: Session = Depends(get_session),
+):
+    try:
+        payload = kline_payload(session, symbol, timeframe, limit)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    response = response_envelope(
+        payload["bars"],
+        source="HEADACHE_TRADE_DB",
+        synced_at=payload["latest_bar_at"],
+    )
+    response["context"] = {
+        "symbol": payload["symbol"],
+        "timeframe": payload["timeframe"],
+        "anomaly_count": payload["anomaly_count"],
+    }
+    return response
 
 
 @app.get("/sim-orders", response_class=HTMLResponse)

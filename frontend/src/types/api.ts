@@ -7,6 +7,16 @@ export interface ApiMeta {
 export interface ApiEnvelope<T> {
   data: T;
   meta: ApiMeta;
+  context?: Record<string, unknown>;
+}
+
+export interface KlineBar {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
 }
 
 export interface StatusPresentation {

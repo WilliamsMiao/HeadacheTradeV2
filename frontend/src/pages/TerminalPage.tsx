@@ -14,7 +14,7 @@ import { BottomTimeline } from '../components/layout/BottomTimeline';
 import { TopStatusBar } from '../components/layout/TopStatusBar';
 import { EmptyState } from '../components/common/EmptyState';
 import { LoadingBlock } from '../components/common/LoadingBlock';
-import { PriceFramework } from '../components/terminal/PriceFramework';
+import { MarketChartPanel } from '../components/terminal/MarketChartPanel';
 import { SymbolPlanList } from '../components/terminal/SymbolPlanList';
 import { TradePlanDetailPanel } from '../components/terminal/TradePlanDetailPanel';
 import { useTerminalStore } from '../store/terminalStore';
@@ -100,7 +100,7 @@ export function TerminalPage() {
         </nav>
         <section className="center-workspace">
           {detailQuery.isLoading ? <LoadingBlock /> : null}
-          {!detailQuery.isLoading && detail ? <PriceFramework plan={detail.trade_plan} /> : null}
+          {!detailQuery.isLoading && detail ? <MarketChartPanel plan={detail.trade_plan} /> : null}
           {!detailQuery.isLoading && !detail ? <EmptyState description="请选择一个交易计划" /> : null}
         </section>
         <section className="right-rail">

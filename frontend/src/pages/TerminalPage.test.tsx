@@ -101,6 +101,13 @@ beforeEach(() => {
           meta: summary.meta,
         });
       }
+      if (path.startsWith('/api/kline?')) {
+        return Response.json({
+          data: [],
+          meta: summary.meta,
+          context: { symbol: 'US.AAPL', timeframe: '60m', anomaly_count: 0 },
+        });
+      }
       return Response.json({ data: [], meta: summary.meta });
     }),
   );
@@ -117,7 +124,8 @@ describe('TerminalPage', () => {
 
     expect(await screen.findByText('模拟交易')).toBeInTheDocument();
     expect(screen.getByText('REAL TRADING DISABLED')).toBeInTheDocument();
-    expect(await screen.findByText('AAPL 价格框架')).toBeInTheDocument();
+    expect(await screen.findByText('AAPL 行情')).toBeInTheDocument();
+    expect(await screen.findByText('当前没有 60 分钟 K 线数据')).toBeInTheDocument();
     await waitFor(() => expect(screen.getAllByText('持续监控中').length).toBeGreaterThan(0));
   });
 });

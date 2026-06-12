@@ -8,6 +8,7 @@ from app.models import (
     AuditLog,
     BattlePoolItem,
     CandidateStock,
+    KLine,
     Position,
     SimOrder,
     StructureEvent,
@@ -35,6 +36,7 @@ ACTIVE_PLAN_STATUSES = {
     "BLOCKED",
     "PAUSED",
 }
+TERMINAL_KLINE_TIMEFRAMES = {"60m", "1d"}
 
 
 def terminal_summary(session: Session, settings: Settings) -> dict:
@@ -190,6 +192,43 @@ def orders_payload(session: Session, symbol: str = "") -> list[dict]:
         query = query.where(SimOrder.symbol == symbol.upper())
     orders = list(session.scalars(query.order_by(SimOrder.submitted_at.desc()).limit(300)))
     return [_serialize_order(order) for order in orders]
+
+
+def kline_payload(session: Session, symbol: str, timeframe: str, limit: int = 300) -> dict:
+    normalized_symbol = symbol.strip().upper()
+    normalized_timeframe = timeframe.strip().lower()
+    if not normalized_symbol:
+        raise ValueError("股票代码不能为空")
+    if normalized_timeframe not in TERMINAL_KLINE_TIMEFRAMES:
+        raise ValueError("当前终端仅支持 60m 和 1d K 线")
+    bounded_limit = max(1, min(limit, 500))
+    rows = list(
+        session.scalars(
+            select(KLine)
+            .where(KLine.symbol == normalized_symbol, KLine.timeframe == normalized_timeframe)
+            .order_by(KLine.ts.desc())
+            .limit(bounded_limit)
+        )
+    )
+    rows.reverse()
+    return {
+        "bars": [
+            {
+                "time": int(_as_utc(row.ts).timestamp()),
+                "open": row.open,
+                "high": row.high,
+                "low": row.low,
+                "close": row.close,
+                "volume": row.volume,
+            }
+            for row in rows
+            if row.data_ok
+        ],
+        "symbol": normalized_symbol,
+        "timeframe": normalized_timeframe,
+        "latest_bar_at": _iso(rows[-1].ts) if rows else None,
+        "anomaly_count": sum(not row.data_ok for row in rows),
+    }
 
 
 def response_envelope(data, *, source: str, synced_at=None) -> dict:
@@ -391,6 +430,10 @@ def _iso(value) -> str | None:
     if value is None:
         return None
     if isinstance(value, datetime):
-        aware = value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+        aware = _as_utc(value)
         return aware.isoformat()
     return str(value)
+
+
+def _as_utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
