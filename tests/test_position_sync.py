@@ -53,6 +53,7 @@ def test_futu_only_holding_becomes_managed_orphan_position(session):
     position = session.query(Position).one()
     assert result["created"] == 1
     assert position.symbol == "US.EMR"
+    assert position.entry_signal_id == 0
     assert position.source == "FUTU_DETECTED"
     assert position.is_orphan is True
     assert position.shares == 100

@@ -59,6 +59,7 @@ def sync_futu_positions_to_local(
             position = Position(
                 symbol=symbol,
                 status="OPEN",
+                entry_signal_id=0,
                 entry_price=cost,
                 stop_price=cost * (1 - settings.orphan_stop_loss_pct),
                 shares=quantity,
