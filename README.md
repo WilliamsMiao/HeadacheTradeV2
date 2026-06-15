@@ -27,6 +27,10 @@
 - `/trade-plans`：入场区、止损、目标、移动止盈、时间止损和失效条件。
 - `/market`：SPY + QQQ 市场风向标，仅供风险参考。
 - `/opend`：OpenD 安装、配置、启动和验证码管理。
+- `/terminal`：React 只读交易终端，展示多周期 K 线、计划价格线、结构、订单、持仓和复盘统计。
+
+React Terminal 当前使用按数据重要性分级的轮询刷新。WebSocket 尚未接入；跨进程事件发布、
+断线续传和降级策略见 [`docs/websocket_proposal.md`](docs/websocket_proposal.md)。
 
 ## 本地运行
 
