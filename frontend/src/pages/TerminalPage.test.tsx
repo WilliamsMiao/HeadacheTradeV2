@@ -132,6 +132,30 @@ beforeEach(() => {
           meta: summary.meta,
         });
       }
+      if (path === '/api/journal/summary') {
+        return Response.json({
+          data: {
+            closed_trades: 0,
+            wins: 0,
+            losses: 0,
+            win_rate: 0,
+            average_r: 0,
+            cumulative_r: 0,
+            max_drawdown_r: 0,
+            curve: [],
+          },
+          meta: summary.meta,
+        });
+      }
+      if (path === '/api/stats/daily') {
+        return Response.json({
+          data: { rejection_reasons: [], missed_opportunities: [] },
+          meta: summary.meta,
+        });
+      }
+      if (path === '/api/stats/first-valid-trade') {
+        return Response.json({ data: [], meta: summary.meta });
+      }
       return Response.json({ data: [], meta: summary.meta });
     }),
   );
@@ -155,6 +179,8 @@ describe('TerminalPage', () => {
     expect(await screen.findByText('图中结构事件')).toBeInTheDocument();
     expect(await screen.findByText('交易链路时间线')).toBeInTheDocument();
     expect(await screen.findByText('底结构确认。')).toBeInTheDocument();
+    expect(await screen.findByText('统计与复盘')).toBeInTheDocument();
+    expect(await screen.findByText('已结束交易 0 笔')).toBeInTheDocument();
     await waitFor(() => expect(screen.getAllByText('持续监控中').length).toBeGreaterThan(0));
   });
 });

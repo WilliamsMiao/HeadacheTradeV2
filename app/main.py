@@ -85,6 +85,9 @@ from app.services.view_models import (
 )
 from app.services.terminal_api import (
     kline_payload,
+    journal_summary_payload,
+    daily_stats_payload,
+    first_valid_trade_payload,
     orders_payload,
     positions_payload,
     response_envelope,
@@ -408,6 +411,30 @@ def timeline_api(symbol: str, limit: int = 100, session: Session = Depends(get_s
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     synced_at = max((event["time"] for event in events), default=None)
     return response_envelope(events, source="HEADACHE_TRADE_DB", synced_at=synced_at)
+
+
+@app.get("/api/journal/summary")
+def journal_summary_api(session: Session = Depends(get_session)):
+    payload = journal_summary_payload(session)
+    synced_at = payload["curve"][-1]["time"] if payload["curve"] else None
+    return response_envelope(payload, source="HEADACHE_TRADE_DB", synced_at=synced_at)
+
+
+@app.get("/api/stats/daily")
+def daily_stats_api(session: Session = Depends(get_session)):
+    payload = daily_stats_payload(session)
+    synced_at = max(
+        (item["updated_at"] for item in payload["missed_opportunities"] if item["updated_at"]),
+        default=None,
+    )
+    return response_envelope(payload, source="HEADACHE_TRADE_DB", synced_at=synced_at)
+
+
+@app.get("/api/stats/first-valid-trade")
+def first_valid_trade_api(session: Session = Depends(get_session)):
+    payload = first_valid_trade_payload(session)
+    synced_at = payload[0]["created_at"] if payload else None
+    return response_envelope(payload, source="HEADACHE_TRADE_DB", synced_at=synced_at)
 
 
 @app.get("/api/kline")

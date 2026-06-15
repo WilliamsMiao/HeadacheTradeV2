@@ -15,6 +15,7 @@ import { TopStatusBar } from '../components/layout/TopStatusBar';
 import { EmptyState } from '../components/common/EmptyState';
 import { LoadingBlock } from '../components/common/LoadingBlock';
 import { MarketChartPanel } from '../components/terminal/MarketChartPanel';
+import { ReviewPanel } from '../components/terminal/ReviewPanel';
 import { SymbolPlanList } from '../components/terminal/SymbolPlanList';
 import { TradePlanDetailPanel } from '../components/terminal/TradePlanDetailPanel';
 import { useTerminalStore } from '../store/terminalStore';
@@ -127,6 +128,7 @@ export function TerminalPage() {
         </section>
       </div>
       <BottomTimeline symbol={detail?.trade_plan.symbol ?? null} />
+      <ReviewPanel />
     </main>
   );
 }
