@@ -24,8 +24,8 @@ export function TerminalPage() {
   const selectPlan = useTerminalStore((state) => state.selectPlan);
   const summaryQuery = useQuery({ queryKey: ['terminal-summary'], queryFn: getTerminalSummary });
   const plansQuery = useQuery({ queryKey: ['trade-plans'], queryFn: getTradePlans });
-  useQuery({ queryKey: ['positions'], queryFn: getPositions });
-  useQuery({ queryKey: ['orders'], queryFn: getOrders });
+  useQuery({ queryKey: ['positions'], queryFn: () => getPositions() });
+  useQuery({ queryKey: ['orders'], queryFn: () => getOrders() });
   const detailQuery = useQuery({
     queryKey: ['trade-plan-detail', selectedId],
     queryFn: () => getTradePlanDetail(selectedId!),

@@ -162,6 +162,8 @@ def test_position_and_order_payloads_keep_raw_numeric_values(session):
     session.commit()
 
     assert positions_payload(session)[0]["entry_price"] == 180
+    assert positions_payload(session)[0]["created_at"]
+    assert positions_payload(session)[0]["shares"] == 100
     assert orders_payload(session)[0]["limit_price"] == 180
 
 

@@ -10,6 +10,7 @@ import {
 } from 'lightweight-charts';
 
 import type {
+  ExecutionMarker,
   KlineBar,
   StructureMarker,
   TradePlanOverlayLine,
@@ -19,6 +20,7 @@ interface KlineChartProps {
   bars: KlineBar[];
   overlayLines: TradePlanOverlayLine[];
   structures: StructureMarker[];
+  executions: ExecutionMarker[];
 }
 
 const lineVisuals = {
@@ -37,7 +39,7 @@ function markerVisual(eventType: string) {
   return { position: 'aboveBar' as const, shape: 'arrowDown' as const, color: '#dc2626' };
 }
 
-export function KlineChart({ bars, overlayLines, structures }: KlineChartProps) {
+export function KlineChart({ bars, overlayLines, structures, executions }: KlineChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -103,20 +105,33 @@ export function KlineChart({ bars, overlayLines, structures }: KlineChartProps) 
     });
     const firstTime = bars[0].time;
     const lastTime = bars[bars.length - 1].time;
+    const structureMarkers = structures
+      .map((structure) => ({
+        structure,
+        time: Math.floor(new Date(structure.event_ts).getTime() / 1000),
+      }))
+      .filter(({ time }) => time >= firstTime && time <= lastTime)
+      .map(({ structure, time }) => ({
+        ...markerVisual(structure.event_type),
+        time: time as UTCTimestamp,
+        text: structure.display_name,
+        id: String(structure.id),
+      }));
+    const executionMarkers = executions
+      .filter((marker) => marker.time >= firstTime && marker.time <= lastTime)
+      .map((marker) => ({
+        position: marker.position,
+        shape: marker.shape,
+        color: marker.color,
+        time: marker.time as UTCTimestamp,
+        text: marker.text,
+        id: marker.id,
+      }));
     createSeriesMarkers(
       candles,
-      structures
-        .map((structure) => ({
-          structure,
-          time: Math.floor(new Date(structure.event_ts).getTime() / 1000),
-        }))
-        .filter(({ time }) => time >= firstTime && time <= lastTime)
-        .map(({ structure, time }) => ({
-          ...markerVisual(structure.event_type),
-          time: time as UTCTimestamp,
-          text: structure.display_name,
-          id: String(structure.id),
-        })),
+      [...structureMarkers, ...executionMarkers].sort(
+        (left, right) => Number(left.time) - Number(right.time),
+      ),
     );
     const volume = chart.addSeries(HistogramSeries, {
       priceFormat: { type: 'volume' },
@@ -135,7 +150,7 @@ export function KlineChart({ bars, overlayLines, structures }: KlineChartProps) 
     chart.timeScale().fitContent();
 
     return () => chart.remove();
-  }, [bars, overlayLines, structures]);
+  }, [bars, executions, overlayLines, structures]);
 
   return <div className="kline-chart" ref={containerRef} role="img" aria-label="K 线与成交量图" />;
 }
