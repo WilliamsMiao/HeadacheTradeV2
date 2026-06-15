@@ -6,6 +6,7 @@ import type {
   StructureMarker,
   TerminalSummary,
   Timeframe,
+  TimelineEvent,
   TradePlan,
   TradePlanDetail,
   TradePlanOverlay,
@@ -40,4 +41,9 @@ export const getTradePlanOverlay = (symbol: string, planId: number) =>
 export const getStructures = (symbol: string, timeframe: Timeframe) =>
   apiGet<StructureMarker[]>(
     `/api/structures?symbol=${encodeURIComponent(symbol)}&timeframe=${timeframe}&limit=100`,
+  );
+
+export const getTimeline = (symbol: string, limit = 100) =>
+  apiGet<TimelineEvent[]>(
+    `/api/timeline?symbol=${encodeURIComponent(symbol)}&limit=${limit}`,
   );

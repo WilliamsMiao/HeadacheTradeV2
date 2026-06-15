@@ -61,6 +61,17 @@ export interface ExecutionMarker {
   text: string;
 }
 
+export interface TimelineEvent {
+  id: string;
+  time: string;
+  type: string;
+  title: string;
+  description: string;
+  severity: string;
+  linked_entity_type: string;
+  linked_entity_id: number | null;
+}
+
 export interface StatusPresentation {
   code: string;
   display_name: string;

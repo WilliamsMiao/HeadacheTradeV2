@@ -37,6 +37,20 @@ ACTIVE_PLAN_STATUSES = {
     "PAUSED",
 }
 TERMINAL_KLINE_TIMEFRAMES = {"1m", "5m", "15m", "60m", "1d"}
+AUDIT_ACTION_NAMES = {
+    "MISSED_BY_CAPITAL": "资金条件未满足",
+    "POSITION_CLOSED": "模拟持仓已结束",
+    "POSITION_OPENED": "模拟持仓已建立",
+    "RULES_APPROVED": "自动规则审批通过",
+    "RULES_REJECTED": "自动规则审批未通过",
+    "SIM_ORDER_CANCELLED": "模拟订单已撤销",
+    "SIM_ORDER_FAILED": "模拟订单提交失败",
+    "SIM_ORDER_SUBMITTED": "模拟订单已提交",
+    "STOP_LOSS_TRIGGERED": "止损条件已触发",
+    "TAKE_PROFIT_TRIGGERED": "止盈条件已触发",
+    "TRADE_PLAN_VALIDATED": "交易计划已完成实时校验",
+    "TRAILING_STOP_UPDATED": "移动止盈位置已更新",
+}
 
 
 def terminal_summary(session: Session, settings: Settings) -> dict:
@@ -192,6 +206,122 @@ def orders_payload(session: Session, symbol: str = "") -> list[dict]:
         query = query.where(SimOrder.symbol == symbol.upper())
     orders = list(session.scalars(query.order_by(SimOrder.submitted_at.desc()).limit(300)))
     return [_serialize_order(order) for order in orders]
+
+
+def timeline_payload(session: Session, symbol: str, limit: int = 100) -> list[dict]:
+    normalized_symbol = symbol.strip().upper()
+    if not normalized_symbol:
+        raise ValueError("股票代码不能为空")
+    bounded_limit = max(1, min(limit, 300))
+    query_limit = min(bounded_limit, 100)
+    events: list[dict] = []
+
+    structures = list(session.scalars(
+        select(StructureEvent)
+        .where(StructureEvent.symbol == normalized_symbol)
+        .order_by(StructureEvent.event_ts.desc())
+        .limit(query_limit)
+    ))
+    events.extend({
+        "id": f"structure-{event.id}",
+        "time": _iso(event.event_ts),
+        "type": "STRUCTURE",
+        "title": label_for(event.event_type),
+        "description": event.reason,
+        "severity": "warning" if event.event_type.startswith("TOP") else "info",
+        "linked_entity_type": "StructureEvent",
+        "linked_entity_id": event.id,
+    } for event in structures)
+
+    battles = list(session.scalars(
+        select(BattlePoolItem)
+        .where(BattlePoolItem.symbol == normalized_symbol)
+        .order_by(BattlePoolItem.updated_at.desc())
+        .limit(query_limit)
+    ))
+    events.extend({
+        "id": f"battle-{item.id}",
+        "time": _iso(item.updated_at),
+        "type": "BATTLE_POOL",
+        "title": f"进入结构作战池 · {item.priority_level} 级",
+        "description": item.reason,
+        "severity": "success" if item.priority_level in {"S", "A"} else "info",
+        "linked_entity_type": "BattlePoolItem",
+        "linked_entity_id": item.id,
+    } for item in battles)
+
+    plans = list(session.scalars(
+        select(TradePlan)
+        .where(TradePlan.symbol == normalized_symbol)
+        .order_by(TradePlan.updated_at.desc())
+        .limit(query_limit)
+    ))
+    events.extend({
+        "id": f"plan-{plan.id}",
+        "time": _iso(plan.updated_at),
+        "type": "TRADE_PLAN",
+        "title": f"交易计划 · {status_for(plan.status).display_name}",
+        "description": plan.reason,
+        "severity": status_for(plan.status).severity,
+        "linked_entity_type": "TradePlan",
+        "linked_entity_id": plan.id,
+    } for plan in plans)
+
+    orders = list(session.scalars(
+        select(SimOrder)
+        .where(SimOrder.symbol == normalized_symbol)
+        .order_by(SimOrder.updated_at.desc())
+        .limit(query_limit)
+    ))
+    events.extend({
+        "id": f"order-{order.id}",
+        "time": _iso(order.updated_at if order.dealt_qty else order.submitted_at),
+        "type": "SIM_ORDER",
+        "title": (
+            f"{'买入' if order.side == 'BUY' else '卖出'}订单 · "
+            f"{status_for(order.status).display_name}"
+        ),
+        "description": order.reason or status_for(order.status).description,
+        "severity": status_for(order.status).severity,
+        "linked_entity_type": "SimOrder",
+        "linked_entity_id": order.id,
+    } for order in orders)
+
+    positions = list(session.scalars(
+        select(Position)
+        .where(Position.symbol == normalized_symbol)
+        .order_by(Position.updated_at.desc())
+        .limit(query_limit)
+    ))
+    events.extend({
+        "id": f"position-{position.id}",
+        "time": _iso(position.created_at if position.status == "OPEN" else position.updated_at),
+        "type": "POSITION",
+        "title": "模拟持仓已建立" if position.status == "OPEN" else "模拟持仓已结束",
+        "description": (
+            describe_position_next_action(position)
+            if position.status == "OPEN"
+            else position.exit_reason or f"最终结果 {position.current_r:.2f}R"
+        ),
+        "severity": "success" if position.status == "OPEN" or position.current_r >= 0 else "error",
+        "linked_entity_type": "Position",
+        "linked_entity_id": position.id,
+    } for position in positions)
+
+    audits = list(session.scalars(
+        select(AuditLog)
+        .where(AuditLog.symbol == normalized_symbol)
+        .order_by(AuditLog.created_at.desc())
+        .limit(query_limit)
+    ))
+    events.extend({
+        **_audit_payload(log),
+        "id": f"audit-{log.id}",
+    } for log in audits)
+
+    events = [event for event in events if event["time"]]
+    events.sort(key=lambda event: (event["time"], event["id"]), reverse=True)
+    return events[:bounded_limit]
 
 
 def kline_payload(session: Session, symbol: str, timeframe: str, limit: int = 300) -> dict:
@@ -455,7 +585,7 @@ def _audit_payload(log: AuditLog) -> dict:
         "id": log.id,
         "time": _iso(log.created_at),
         "type": log.action,
-        "title": label_for(log.action),
+        "title": AUDIT_ACTION_NAMES.get(log.action, label_for(log.action)),
         "description": log.reason,
         "severity": log.status.lower(),
         "linked_entity_type": log.subject_type,

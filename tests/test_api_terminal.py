@@ -8,6 +8,7 @@ from app.models import (
     KLine,
     Position,
     SimOrder,
+    AuditLog,
     StructureEvent,
     SystemConfig,
     TradePlan,
@@ -18,6 +19,7 @@ from app.services.terminal_api import (
     positions_payload,
     structures_payload,
     terminal_summary,
+    timeline_payload,
     trade_plan_overlay_payload,
     trade_plan_detail,
     trade_plan_list,
@@ -134,6 +136,84 @@ def test_trade_plan_detail_returns_complete_readonly_chain(session):
 def test_position_and_order_payloads_are_empty_safe(session):
     assert positions_payload(session) == []
     assert orders_payload(session) == []
+
+
+def test_timeline_payload_aggregates_and_orders_trade_chain(session):
+    structure = StructureEvent(
+        symbol="US.AAPL",
+        timeframe="60m",
+        event_type="BOTTOM_STRUCTURE",
+        event_ts=datetime(2026, 6, 12, 14, 30),
+        price=178,
+        reason="底结构确认。",
+    )
+    session.add(structure)
+    session.flush()
+    battle = BattlePoolItem(
+        symbol="US.AAPL",
+        direction="LONG",
+        priority_level="S",
+        source_structure_id=structure.id,
+        daily_state="DAILY_STRONG_BULL",
+        structure_type="BOTTOM_STRUCTURE",
+        score=92,
+        reason="结构与日线共振。",
+        status="ACTIVE",
+    )
+    plan = _plan()
+    plan.source_structure_id = structure.id
+    session.add_all([battle, plan])
+    session.flush()
+    session.add_all([
+        SimOrder(
+            trade_plan_id=plan.id,
+            symbol="US.AAPL",
+            side="BUY",
+            qty=100,
+            limit_price=180,
+            status="FILLED",
+            dealt_qty=100,
+            dealt_avg_price=180,
+        ),
+        Position(
+            symbol="US.AAPL",
+            status="OPEN",
+            entry_price=180,
+            stop_price=175,
+            shares=100,
+            risk_amount=500,
+            source_trade_plan_id=plan.id,
+        ),
+        AuditLog(
+            action="RULES_APPROVED",
+            symbol="US.AAPL",
+            subject_type="TradePlan",
+            subject_id=plan.id,
+            status="SUCCESS",
+            reason="规则审批通过。",
+        ),
+    ])
+    session.commit()
+
+    events = timeline_payload(session, "us.aapl", limit=20)
+
+    assert {"STRUCTURE", "BATTLE_POOL", "TRADE_PLAN", "SIM_ORDER", "POSITION"}.issubset(
+        {event["type"] for event in events}
+    )
+    assert any(event["id"].startswith("audit-") for event in events)
+    assert [event["time"] for event in events] == sorted(
+        [event["time"] for event in events], reverse=True
+    )
+
+
+def test_timeline_payload_is_empty_safe_and_requires_symbol(session):
+    assert timeline_payload(session, "US.EMPTY") == []
+    try:
+        timeline_payload(session, "")
+    except ValueError as exc:
+        assert "股票代码不能为空" in str(exc)
+    else:
+        raise AssertionError("blank symbol must be rejected")
 
 
 def test_position_and_order_payloads_keep_raw_numeric_values(session):

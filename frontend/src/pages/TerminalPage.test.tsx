@@ -117,6 +117,21 @@ beforeEach(() => {
       if (path.startsWith('/api/structures?')) {
         return Response.json({ data: [], meta: summary.meta });
       }
+      if (path.startsWith('/api/timeline?')) {
+        return Response.json({
+          data: [{
+            id: 'structure-1',
+            time: '2026-06-12T06:00:00+00:00',
+            type: 'STRUCTURE',
+            title: '底结构',
+            description: '底结构确认。',
+            severity: 'info',
+            linked_entity_type: 'StructureEvent',
+            linked_entity_id: 1,
+          }],
+          meta: summary.meta,
+        });
+      }
       return Response.json({ data: [], meta: summary.meta });
     }),
   );
@@ -138,6 +153,8 @@ describe('TerminalPage', () => {
       await screen.findByText('当前尚未采集 60 分钟 K 线；可切换到 60 分钟或日线继续查看'),
     ).toBeInTheDocument();
     expect(await screen.findByText('图中结构事件')).toBeInTheDocument();
+    expect(await screen.findByText('交易链路时间线')).toBeInTheDocument();
+    expect(await screen.findByText('底结构确认。')).toBeInTheDocument();
     await waitFor(() => expect(screen.getAllByText('持续监控中').length).toBeGreaterThan(0));
   });
 });
