@@ -51,3 +51,14 @@ def test_release_pauses_database_users_before_initializing_schema():
     assert stop_web < init_db
     assert "trap restore_existing_services EXIT" in release_script
     assert "services_paused=0" in release_script
+
+
+def test_release_prunes_old_release_directories_before_extracting():
+    release_script = (Path(__file__).parents[1] / "deploy" / "remote_release.sh").read_text()
+
+    prune = release_script.index('find "${APP_ROOT}/releases"')
+    extract = release_script.index('tar -xzf - -C "${RELEASE_DIR}"')
+
+    assert prune < extract
+    assert 'current_release="$(readlink -f "${CURRENT_LINK}" || true)"' in release_script
+    assert 'RELEASES_TO_KEEP="${RELEASES_TO_KEEP:-3}"' in release_script

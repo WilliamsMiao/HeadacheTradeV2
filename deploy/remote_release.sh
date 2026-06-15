@@ -9,6 +9,7 @@ RELEASE_ID="${RELEASE_ID:-manual}"
 RELEASE_DIR="${APP_ROOT}/releases/${RELEASE_ID}"
 CURRENT_LINK="${APP_ROOT}/current"
 BACKUP_DIR="${APP_ROOT}/shared/backups"
+RELEASES_TO_KEEP="${RELEASES_TO_KEEP:-3}"
 
 if [[ "$(id -u)" -ne 0 ]]; then
   echo "remote_release.sh must run as root, usually via sudo" >&2
@@ -28,7 +29,18 @@ if ! id "${APP_USER}" >/dev/null 2>&1; then
   useradd --system --create-home --shell /usr/sbin/nologin "${APP_USER}"
 fi
 
-mkdir -p "${RELEASE_DIR}" "${APP_ROOT}/shared/data" "${BACKUP_DIR}"
+mkdir -p "${APP_ROOT}/releases" "${APP_ROOT}/shared/data" "${BACKUP_DIR}"
+current_release="$(readlink -f "${CURRENT_LINK}" || true)"
+rm -rf "${RELEASE_DIR}"
+find "${APP_ROOT}/releases" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' \
+  | sort -nr \
+  | awk -v keep="${RELEASES_TO_KEEP}" -v current="${current_release}" '
+      $2 == current { next }
+      retained < keep { retained += 1; next }
+      { print $2 }
+    ' \
+  | xargs -r rm -rf
+mkdir -p "${RELEASE_DIR}"
 tar -xzf - -C "${RELEASE_DIR}"
 
 mkdir -p "${ENV_DIR}"
