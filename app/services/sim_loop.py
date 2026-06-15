@@ -10,6 +10,7 @@ from app.providers.mock_trade_provider import MockTradeProvider
 from app.services.order_sync import sync_sim_orders
 from app.services.portfolio_manager import get_portfolio_state, rank_waitlisted_plans
 from app.services.position_manager import manage_positions
+from app.services.position_sync import sync_futu_positions_to_local
 from app.services.realtime_execution_validator import validate_active_trade_plans
 from app.services.rules_approval import rules_approve_trade_plan
 from app.services.sim_order_executor import execute_approved_sim_orders
@@ -21,6 +22,7 @@ def run_sim_loop(session: Session, settings: Settings, use_mock: bool = False) -
     trade_provider = MockTradeProvider() if use_mock else FutuTradeProvider(settings)
     try:
         synced = sync_sim_orders(session, trade_provider, settings.entry_order_timeout_seconds)
+        position_sync = sync_futu_positions_to_local(session, trade_provider, settings)
         managed = manage_positions(session, quote_provider, trade_provider, settings)
         portfolio = get_portfolio_state(session, trade_provider, settings)
         validation = validate_active_trade_plans(session, quote_provider, settings)
@@ -50,6 +52,7 @@ def run_sim_loop(session: Session, settings: Settings, use_mock: bool = False) -
         waitlist = rank_waitlisted_plans(session)
         return {
             "synced": synced,
+            "position_sync": position_sync,
             "positions": managed,
             "portfolio": portfolio.__dict__,
             "validation": validation,

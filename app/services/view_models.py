@@ -204,9 +204,22 @@ def position_view_models(session: Session, positions: list[Position]) -> list[di
     output = []
     for position in positions:
         plan = session.get(TradePlan, position.source_trade_plan_id) if position.source_trade_plan_id else None
+        latest_audit = session.scalar(
+            select(AuditLog)
+            .where(
+                AuditLog.subject_type == "Position",
+                AuditLog.subject_id == position.id,
+            )
+            .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
+        )
+        current_price = float(position.current_price or 0)
+        effective_stop = max(float(position.stop_price or 0), float(position.trailing_stop_price or 0))
         output.append({
             "record": position,
             "plan": plan,
+            "latest_audit": latest_audit,
+            "take_profit_reached": bool(position.target_1 and current_price >= position.target_1),
+            "stop_loss_reached": bool(effective_stop and current_price <= effective_stop),
             "next_action": describe_position_next_action(position),
         })
     return output

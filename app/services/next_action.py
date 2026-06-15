@@ -39,6 +39,13 @@ def describe_trade_plan_next_action(plan: TradePlan) -> str:
 
 
 def describe_position_next_action(position: Position) -> str:
+    last_error = getattr(position, "last_error", "")
+    if last_error:
+        return f"最近一次检查遇到问题：{last_error}。系统会在下一轮继续检查。"
+    if getattr(position, "is_orphan", False):
+        take_pct = (getattr(position, "take_profit_pct", None) or 0.03) * 100
+        stop_pct = (getattr(position, "stop_loss_pct", None) or 0.02) * 100
+        return f"富途账户检测持仓，按默认止盈 {take_pct:.1f}% / 止损 {stop_pct:.1f}% 自动管理。"
     if position.current_r <= -0.7:
         return "接近止损，系统正在优先监控退出条件。"
     if position.partial_exit_done:

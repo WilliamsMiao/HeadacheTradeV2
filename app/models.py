@@ -347,6 +347,19 @@ class Position(Base, TimestampMixin):
     partial_exit_done: Mapped[bool] = mapped_column(Boolean, default=False)
     trailing_stop_price: Mapped[float | None] = mapped_column(Float, nullable=True)
     overnight_policy: Mapped[str] = mapped_column(String(24), default="INTRADAY_ONLY")
+    source: Mapped[str] = mapped_column(String(32), default="LOCAL_STRATEGY", index=True)
+    is_orphan: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    name: Mapped[str] = mapped_column(String(128), default="")
+    available_shares: Mapped[int] = mapped_column(Integer, default=0)
+    current_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    market_value: Mapped[float] = mapped_column(Float, default=0)
+    unrealized_pnl: Mapped[float] = mapped_column(Float, default=0)
+    unrealized_pnl_pct: Mapped[float] = mapped_column(Float, default=0)
+    take_profit_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    stop_loss_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_risk_checked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_error: Mapped[str] = mapped_column(Text, default="")
 
 
 class SimOrder(Base, TimestampMixin):

@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Position, SimDeal, SimOrder, TradePlan
 from app.services.audit import write_audit
+from app.services.position_sync import normalize_symbol
 
 
 OPEN_STATUSES = {"SUBMITTED", "SUBMITTING", "WAITING_SUBMIT", "PARTIALLY_FILLED", "PART_FILLED"}
@@ -102,17 +103,24 @@ def _is_missing_remote_order(exc: Exception) -> bool:
 def _open_or_close_position(session: Session, order: SimOrder) -> None:
     plan = session.get(TradePlan, order.trade_plan_id) if order.trade_plan_id else None
     if order.side == "BUY" and plan:
-        position = session.scalar(select(Position).where(Position.symbol == order.symbol))
+        symbol = normalize_symbol(order.symbol)
+        position = session.scalar(
+            select(Position).where(Position.symbol.in_({symbol, symbol.removeprefix("US.")}))
+        )
         if position is None:
             position = Position(
-                symbol=order.symbol,
+                symbol=symbol,
                 entry_signal_id=None,
                 entry_price=order.dealt_avg_price or order.limit_price,
                 stop_price=plan.stop_price,
                 shares=order.dealt_qty or order.qty,
                 risk_amount=(order.dealt_avg_price or order.limit_price - plan.stop_price) * (order.dealt_qty or order.qty),
+                available_shares=order.dealt_qty or order.qty,
+                source="LOCAL_STRATEGY",
             )
             session.add(position)
+        else:
+            position.symbol = symbol
         position.status = "OPEN"
         position.source_trade_plan_id = plan.id
         position.entry_order_id = order.id
@@ -122,10 +130,17 @@ def _open_or_close_position(session: Session, order: SimOrder) -> None:
         plan.status = "IN_POSITION"
         write_audit(session, "POSITION_OPENED", symbol=order.symbol, subject_type="Position", status="OPEN")
     elif order.side == "SELL":
-        position = session.scalar(select(Position).where(Position.symbol == order.symbol, Position.status == "OPEN"))
+        symbol = normalize_symbol(order.symbol)
+        position = session.scalar(
+            select(Position).where(
+                Position.symbol.in_({symbol, symbol.removeprefix("US.")}),
+                Position.status == "OPEN",
+            )
+        )
         if position:
             sold = order.dealt_qty or order.qty
             position.shares = max(0, position.shares - sold)
+            position.available_shares = max(0, position.available_shares - sold)
             if position.shares == 0:
                 position.status = "CLOSED"
                 position.exit_order_id = order.id

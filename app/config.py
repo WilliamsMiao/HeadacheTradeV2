@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     max_daily_loss_pct: float = 0.015
     max_consecutive_losses: int = 3
     entry_order_timeout_seconds: int = 60
+    orphan_take_profit_pct: float = 0.03
+    orphan_stop_loss_pct: float = 0.02
     force_intraday_exit: bool = True
     enable_overnight_hold: bool = False
     no_new_entry_before_minutes_after_open: int = 60

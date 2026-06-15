@@ -510,7 +510,6 @@ def positions_page(request: Request, session: Session = Depends(get_session)):
         "positions.html",
         {
             "positions": position_view_models(session, positions),
-            "futu_positions": futu_position_snapshot(session),
             "portfolio_sync": portfolio_sync_status(session),
             "freshness": freshness_context(session, sections={"positions"})["positions"],
         },
