@@ -126,7 +126,7 @@ export function TerminalPage() {
           {!detailQuery.isLoading && !detail ? <EmptyState description="暂无计划详情" /> : null}
         </section>
       </div>
-      <BottomTimeline detail={detail} />
+      <BottomTimeline symbol={detail?.trade_plan.symbol ?? null} />
     </main>
   );
 }

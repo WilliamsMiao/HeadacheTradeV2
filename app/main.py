@@ -90,6 +90,7 @@ from app.services.terminal_api import (
     response_envelope,
     structures_payload,
     terminal_summary,
+    timeline_payload,
     trade_plan_overlay_payload,
     trade_plan_detail,
     trade_plan_list,
@@ -397,6 +398,16 @@ def sim_orders_api(symbol: str = "", session: Session = Depends(get_session)):
     orders = orders_payload(session, symbol)
     synced_at = max((order["submitted_at"] for order in orders if order["submitted_at"]), default=None)
     return response_envelope(orders, source="FUTU_SIM_ACCOUNT", synced_at=synced_at)
+
+
+@app.get("/api/timeline")
+def timeline_api(symbol: str, limit: int = 100, session: Session = Depends(get_session)):
+    try:
+        events = timeline_payload(session, symbol, limit)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    synced_at = max((event["time"] for event in events), default=None)
+    return response_envelope(events, source="HEADACHE_TRADE_DB", synced_at=synced_at)
 
 
 @app.get("/api/kline")

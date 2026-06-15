@@ -515,6 +515,15 @@ a:focus-visible {
   padding: 16px;
 }
 
+.timeline-collapse {
+  margin-top: 12px;
+  background: transparent;
+}
+
+.timeline-collapse .ant-collapse-content-box {
+  padding: 0 !important;
+}
+
 .timeline-strip {
   display: grid;
   grid-template-columns: repeat(5, minmax(180px, 1fr));
@@ -534,6 +543,17 @@ a:focus-visible {
 .timeline-event strong,
 .timeline-event span {
   display: block;
+}
+
+.timeline-event__meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+
+.timeline-event__meta .ant-tag {
+  margin: 0;
 }
 
 .timeline-event time {
