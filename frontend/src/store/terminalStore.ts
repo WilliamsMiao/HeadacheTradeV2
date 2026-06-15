@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-type Timeframe = '60m' | '1d';
+import type { Timeframe } from '../types/api';
 
 interface TerminalState {
   selectedSymbol: string | null;

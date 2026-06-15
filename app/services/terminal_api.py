@@ -36,7 +36,7 @@ ACTIVE_PLAN_STATUSES = {
     "BLOCKED",
     "PAUSED",
 }
-TERMINAL_KLINE_TIMEFRAMES = {"60m", "1d"}
+TERMINAL_KLINE_TIMEFRAMES = {"1m", "5m", "15m", "60m", "1d"}
 
 
 def terminal_summary(session: Session, settings: Settings) -> dict:
@@ -200,7 +200,7 @@ def kline_payload(session: Session, symbol: str, timeframe: str, limit: int = 30
     if not normalized_symbol:
         raise ValueError("股票代码不能为空")
     if normalized_timeframe not in TERMINAL_KLINE_TIMEFRAMES:
-        raise ValueError("当前终端仅支持 60m 和 1d K 线")
+        raise ValueError("当前终端仅支持 1m、5m、15m、60m 和 1d K 线")
     bounded_limit = max(1, min(limit, 500))
     rows = list(
         session.scalars(

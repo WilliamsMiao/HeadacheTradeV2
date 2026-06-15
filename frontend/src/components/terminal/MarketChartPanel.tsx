@@ -11,7 +11,13 @@ import {
   getTradePlanOverlay,
 } from '../../api/terminal';
 import { useTerminalStore } from '../../store/terminalStore';
-import type { TradePlan } from '../../types/api';
+import type { Timeframe, TradePlan } from '../../types/api';
+import {
+  freshnessFor,
+  timeframeContext,
+  timeframeName,
+  timeframeOptions,
+} from '../../utils/timeframes';
 import { buildOrderMarkers } from '../charts/OrderMarkers';
 import { buildPositionMarkers } from '../charts/PositionMarkers';
 import { EmptyState } from '../common/EmptyState';
@@ -32,23 +38,28 @@ export function MarketChartPanel({ plan }: MarketChartPanelProps) {
   const query = useQuery({
     queryKey: ['kline', plan.symbol, timeframe],
     queryFn: () => getKlines(plan.symbol, timeframe, timeframe === '1d' ? 250 : 300),
+    refetchInterval: 10_000,
   });
   const overlayQuery = useQuery({
     queryKey: ['trade-plan-overlay', plan.id],
     queryFn: () => getTradePlanOverlay(plan.symbol, plan.id),
+    refetchInterval: 15_000,
   });
   const structuresQuery = useQuery({
     queryKey: ['structures', plan.symbol, timeframe],
     queryFn: () => getStructures(plan.symbol, timeframe),
     enabled: timeframe === '60m',
+    refetchInterval: 60_000,
   });
   const ordersQuery = useQuery({
     queryKey: ['orders', plan.symbol],
     queryFn: () => getOrders(plan.symbol),
+    refetchInterval: 15_000,
   });
   const positionsQuery = useQuery({
     queryKey: ['positions', plan.symbol],
     queryFn: () => getPositions(plan.symbol),
+    refetchInterval: 15_000,
   });
   const bars = query.data?.data ?? [];
   const overlayLines = overlayQuery.data?.data.lines ?? [];
@@ -65,24 +76,20 @@ export function MarketChartPanel({ plan }: MarketChartPanelProps) {
     ];
   }, [orders, positions]);
   const syncedAt = query.data?.meta.synced_at;
+  const freshness = freshnessFor(syncedAt, timeframe);
 
   return (
     <section className="market-chart-panel">
       <div className="section-heading">
         <div>
           <h2>{plan.symbol.replace('US.', '')} 行情</h2>
-          <p>
-            {plan.structure_display_name} · {timeframe === '60m' ? '60 分钟结构周期' : '日线趋势周期'}
-          </p>
+          <p>{plan.structure_display_name} · {timeframeContext(timeframe)}</p>
         </div>
         <div className="chart-controls">
           <Segmented
             aria-label="选择时间周期"
-            onChange={(value) => setTimeframe(value as '60m' | '1d')}
-            options={[
-              { label: '60 分钟', value: '60m' },
-              { label: '日线', value: '1d' },
-            ]}
+            onChange={(value) => setTimeframe(value as Timeframe)}
+            options={timeframeOptions}
             value={timeframe}
           />
           <Button
@@ -95,9 +102,12 @@ export function MarketChartPanel({ plan }: MarketChartPanelProps) {
         </div>
       </div>
       <div className="chart-freshness">
-        <span>数据周期：{timeframe === '60m' ? '60 分钟' : '日线'}</span>
+        <span>数据周期：{timeframeName(timeframe)}</span>
         <span>
           最新 K 线：{syncedAt ? new Date(syncedAt).toLocaleString('zh-CN', { hour12: false }) : '尚无数据'}
+        </span>
+        <span className={freshness.stale ? 'freshness-status freshness-status--stale' : 'freshness-status'}>
+          {freshness.label}
         </span>
         <span>成交与持仓标记：{executions.length} 项</span>
       </div>
@@ -113,7 +123,7 @@ export function MarketChartPanel({ plan }: MarketChartPanelProps) {
           />
         ) : null}
         {!query.isLoading && !query.isError && bars.length === 0 ? (
-          <EmptyState description={`当前没有 ${timeframe === '60m' ? '60 分钟' : '日线'} K 线数据`} />
+          <EmptyState description={`当前尚未采集 ${timeframeName(timeframe)} K 线；可切换到 60 分钟或日线继续查看`} />
         ) : null}
         {!query.isLoading && !query.isError && bars.length > 0 ? (
           <Suspense fallback={<LoadingBlock />}>

@@ -10,6 +10,8 @@ export interface ApiEnvelope<T> {
   context?: Record<string, unknown>;
 }
 
+export type Timeframe = '1m' | '5m' | '15m' | '60m' | '1d';
+
 export interface KlineBar {
   time: number;
   open: number;
