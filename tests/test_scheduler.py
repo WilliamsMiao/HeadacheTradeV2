@@ -38,3 +38,16 @@ def test_release_installs_and_enables_both_timers():
     assert "headachetrade-60m.timer" in release_script
     assert "headachetrade-market-refresh.timer" in release_script
     assert "systemctl enable --now headachetrade-daily.timer headachetrade-market-refresh.timer headachetrade-60m.timer" in release_script
+
+
+def test_release_pauses_database_users_before_initializing_schema():
+    release_script = (Path(__file__).parents[1] / "deploy" / "remote_release.sh").read_text()
+
+    stop_tasks = release_script.index('systemctl stop "${background_units[@]}"')
+    stop_web = release_script.index('systemctl stop "${SERVICE_NAME}"')
+    init_db = release_script.index("uv run python -m app.cli init-db")
+
+    assert stop_tasks < init_db
+    assert stop_web < init_db
+    assert "trap restore_existing_services EXIT" in release_script
+    assert "services_paused=0" in release_script

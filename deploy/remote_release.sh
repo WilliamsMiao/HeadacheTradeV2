@@ -60,6 +60,33 @@ set -a
 source "${ENV_DIR}/headachetrade.env"
 set +a
 
+background_units=(
+  headachetrade-daily.timer
+  headachetrade-market-refresh.timer
+  headachetrade-60m.timer
+  headachetrade-sim-loop.timer
+  headachetrade-daily.service
+  headachetrade-market-refresh.service
+  headachetrade-60m.service
+  headachetrade-sim-loop.service
+)
+services_paused=1
+
+restore_existing_services() {
+  if [[ "${services_paused}" != "1" ]]; then
+    return
+  fi
+  systemctl start "${SERVICE_NAME}" || true
+  systemctl start headachetrade-daily.timer headachetrade-market-refresh.timer headachetrade-60m.timer || true
+  if grep -Eq '^ENABLE_SIM_TRADING=(true|1|yes)$' "${ENV_DIR}/headachetrade.env"; then
+    systemctl start headachetrade-sim-loop.timer || true
+  fi
+}
+
+trap restore_existing_services EXIT
+systemctl stop "${background_units[@]}" || true
+systemctl stop "${SERVICE_NAME}" || true
+
 if [[ "${DATABASE_URL:-}" == sqlite:///* ]]; then
   database_path="${DATABASE_URL#sqlite:///}"
   if [[ -f "${database_path}" ]]; then
@@ -147,4 +174,5 @@ if [[ "${healthy}" != "1" ]]; then
   exit 1
 fi
 
+services_paused=0
 systemctl status "${SERVICE_NAME}" --no-pager --lines=30
