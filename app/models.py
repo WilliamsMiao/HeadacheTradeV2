@@ -329,7 +329,7 @@ class Position(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     symbol: Mapped[str] = mapped_column(String(32), unique=True, index=True)
     status: Mapped[str] = mapped_column(String(32), default="OPEN", index=True)
-    entry_signal_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    entry_signal_id: Mapped[int] = mapped_column(Integer, default=0, nullable=False, index=True)
     entry_price: Mapped[float] = mapped_column(Float)
     stop_price: Mapped[float] = mapped_column(Float)
     trailing_stop: Mapped[float | None] = mapped_column(Float, nullable=True)

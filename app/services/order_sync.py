@@ -110,7 +110,7 @@ def _open_or_close_position(session: Session, order: SimOrder) -> None:
         if position is None:
             position = Position(
                 symbol=symbol,
-                entry_signal_id=None,
+                entry_signal_id=0,
                 entry_price=order.dealt_avg_price or order.limit_price,
                 stop_price=plan.stop_price,
                 shares=order.dealt_qty or order.qty,
