@@ -27,37 +27,31 @@ def sync_sim_orders(session: Session, trade_provider, timeout_seconds: int = 60)
     updated = filled = 0
     by_id = {str(row.get("order_id") or ""): row for row in rows}
     for order in session.scalars(select(SimOrder).where(SimOrder.status.in_({"SUBMITTED", "PARTIALLY_FILLED"}))):
+        row = by_id.get(order.futu_order_id)
+        if row:
+            status = _normalize_status(str(row.get("order_status") or row.get("status") or ""))
+            order.status = status
+            order.dealt_qty = int(float(row.get("dealt_qty") or 0))
+            order.dealt_avg_price = float(row.get("dealt_avg_price") or 0) or None
+            order.raw_response_json = json.dumps(row, ensure_ascii=False, default=str)
+            updated += 1
+            if status == "FILLED":
+                _open_or_close_position(session, order)
+                filled += 1
+                continue
+            if status in {"CANCELLED", "FAILED"}:
+                continue
         if order.status == "SUBMITTED" and order.submitted_at < datetime.utcnow() - timedelta(seconds=timeout_seconds):
             try:
                 trade_provider.cancel_order(order.futu_order_id)
-                order.status = "CANCELLED"
-                if order.trade_plan_id:
-                    plan = session.get(TradePlan, order.trade_plan_id)
-                    if plan:
-                        plan.status = "ARMED"
-                write_audit(
-                    session,
-                    "SIM_ORDER_CANCELLED",
-                    symbol=order.symbol,
-                    subject_type="SimOrder",
-                    subject_id=order.id,
-                    reason="入场限价单超过等待时间",
-                )
             except Exception as exc:
-                order.reason = str(exc)
+                if _is_missing_remote_order(exc):
+                    _mark_cancelled(session, order, "Futu 已不存在该订单，本地停止重复撤单")
+                else:
+                    order.reason = str(exc)
+            else:
+                _mark_cancelled(session, order, "入场限价单超过等待时间")
             continue
-        row = by_id.get(order.futu_order_id)
-        if not row:
-            continue
-        status = _normalize_status(str(row.get("order_status") or row.get("status") or ""))
-        order.status = status
-        order.dealt_qty = int(float(row.get("dealt_qty") or 0))
-        order.dealt_avg_price = float(row.get("dealt_avg_price") or 0) or None
-        order.raw_response_json = json.dumps(row, ensure_ascii=False, default=str)
-        updated += 1
-        if status == "FILLED":
-            _open_or_close_position(session, order)
-            filled += 1
 
     known_deals = {deal.futu_deal_id for deal in session.scalars(select(SimDeal))}
     for row in deals:
@@ -81,6 +75,28 @@ def sync_sim_orders(session: Session, trade_provider, timeout_seconds: int = 60)
         )
     session.commit()
     return {"updated": updated, "filled": filled, "deals_supported": deals_supported}
+
+
+def _mark_cancelled(session: Session, order: SimOrder, reason: str) -> None:
+    order.status = "CANCELLED"
+    order.reason = reason
+    if order.trade_plan_id:
+        plan = session.get(TradePlan, order.trade_plan_id)
+        if plan:
+            plan.status = "ARMED"
+    write_audit(
+        session,
+        "SIM_ORDER_CANCELLED",
+        symbol=order.symbol,
+        subject_type="SimOrder",
+        subject_id=order.id,
+        reason=reason,
+    )
+
+
+def _is_missing_remote_order(exc: Exception) -> bool:
+    message = str(exc)
+    return "订单号不存在" in message or "order does not exist" in message.lower()
 
 
 def _open_or_close_position(session: Session, order: SimOrder) -> None:

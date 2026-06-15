@@ -1,6 +1,11 @@
 from app.config import Settings
 from app.models import TradePlan
-from app.services.portfolio_manager import check_sim_account_connection, get_portfolio_state, portfolio_sync_status
+from app.services.portfolio_manager import (
+    check_sim_account_connection,
+    futu_position_snapshot,
+    get_portfolio_state,
+    portfolio_sync_status,
+)
 
 
 class BrokenTradeProvider:
@@ -23,7 +28,16 @@ class WorkingTradeProvider:
         return {"cash": 100000}
 
     def get_positions(self):
-        return [{"code": "US.AAPL", "qty": 10}]
+        return [{
+            "code": "US.AAPL",
+            "stock_name": "Apple",
+            "qty": 10,
+            "can_sell_qty": 8,
+            "cost_price": 190,
+            "market_val": 2000,
+            "pl_val": 100,
+            "pl_ratio": 5,
+        }]
 
     def get_open_orders(self):
         return []
@@ -39,6 +53,17 @@ def test_read_only_sim_account_check_reports_all_connections(session):
     saved = portfolio_sync_status(session)
     assert saved["account_equity"] == 100000
     assert saved["account_equity_source"] == "FUTU_SIM_ACCOUNT"
+    assert futu_position_snapshot(session) == [{
+        "symbol": "US.AAPL",
+        "name": "Apple",
+        "qty": 10,
+        "available_qty": 8,
+        "cost_price": 190,
+        "market_value": 2000,
+        "pl_value": 100,
+        "pl_ratio": 0.05,
+        "currency": "USD",
+    }]
 
 
 def test_available_portfolio_state_is_written_to_active_plans(session):

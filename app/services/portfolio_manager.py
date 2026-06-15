@@ -67,6 +67,7 @@ def get_portfolio_state(session: Session, trade_provider, settings: Settings) ->
             state=state,
             remote_positions=remote_position_count,
             remote_orders=remote_order_count,
+            position_rows=remote_positions,
         )
         _apply_portfolio_state_to_plans(session, state, settings)
         return state
@@ -136,6 +137,11 @@ def portfolio_sync_status(session: Session) -> dict:
         return {"ok": False, "status": "CAPITAL_UNKNOWN", "error": "组合账户同步状态损坏", "updated_at": None}
 
 
+def futu_position_snapshot(session: Session) -> list[dict]:
+    rows = portfolio_sync_status(session).get("positions")
+    return rows if isinstance(rows, list) else []
+
+
 def check_sim_account_connection(session: Session, trade_provider, settings: Settings) -> dict:
     state = get_portfolio_state(session, trade_provider, settings)
     saved = portfolio_sync_status(session)
@@ -159,6 +165,7 @@ def _save_portfolio_sync(
     state: PortfolioState,
     remote_positions: int = 0,
     remote_orders: int = 0,
+    position_rows: list[dict] | None = None,
     error: str = "",
 ) -> None:
     record = session.scalar(select(SystemConfig).where(SystemConfig.key == "portfolio_sync_status"))
@@ -177,6 +184,7 @@ def _save_portfolio_sync(
         "open_orders": state.open_orders,
         "remote_positions": remote_positions,
         "remote_orders": remote_orders,
+        "positions": [_position_snapshot(row) for row in (position_rows or []) if _position_is_open(row)],
         "reason": state.reason,
         "error": error,
         "updated_at": datetime.now(UTC).isoformat(),
@@ -207,6 +215,20 @@ def _position_is_open(row: dict) -> bool:
         return float(row.get("qty") or row.get("quantity") or 0) > 0
     except (TypeError, ValueError):
         return False
+
+
+def _position_snapshot(row: dict) -> dict:
+    return {
+        "symbol": str(row.get("code") or row.get("symbol") or ""),
+        "name": str(row.get("stock_name") or row.get("name") or ""),
+        "qty": float(row.get("qty") or row.get("quantity") or 0),
+        "available_qty": float(row.get("can_sell_qty") or row.get("available_qty") or 0),
+        "cost_price": float(row.get("cost_price") or row.get("average_price") or 0),
+        "market_value": float(row.get("market_val") or row.get("market_value") or 0),
+        "pl_value": float(row.get("pl_val") or row.get("pl_value") or 0),
+        "pl_ratio": float(row.get("pl_ratio") or 0) / 100,
+        "currency": str(row.get("currency") or "USD"),
+    }
 
 
 def _order_is_open(row: dict) -> bool:

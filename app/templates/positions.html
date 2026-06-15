@@ -34,4 +34,38 @@
   <div class="panel empty-page"><div class="empty"><strong>暂无模拟持仓</strong><span>模拟订单成交后，系统会在这里持续管理止损和目标。</span></div></div>
 {% endfor %}
 </div>
+<section class="panel section-stack">
+  <header class="section-heading">
+    <div>
+      <h2>Futu 模拟账户持仓</h2>
+      <p>展示 Futu 返回的全部持仓。没有来源交易计划的仓位仅供核对，不会自动止损或止盈。</p>
+    </div>
+    <span class="state">{{ "同步正常" if portfolio_sync.ok else "同步异常" }}</span>
+  </header>
+  {% if futu_positions %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>标的</th><th>名称</th><th>持仓数量</th><th>可卖数量</th><th>成本价</th><th>市值</th><th>持仓盈亏</th></tr></thead>
+      <tbody>
+      {% for position in futu_positions %}
+        <tr>
+          <td><strong>{{ position.symbol }}</strong></td>
+          <td>{{ position.name or "-" }}</td>
+          <td>{{ position.qty|shares }}</td>
+          <td>{{ position.available_qty|shares }}</td>
+          <td>{{ position.cost_price|price }}</td>
+          <td>{{ position.market_value|money }}</td>
+          <td>{{ position.pl_value|money }} · {{ position.pl_ratio|percent }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">
+    <strong>尚未读取到 Futu 持仓明细</strong>
+    <span>{{ portfolio_sync.error or "等待下一次模拟账户同步。" }}</span>
+  </div>
+  {% endif %}
+</section>
 {% endblock %}
