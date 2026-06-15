@@ -1,6 +1,7 @@
+import json
 from datetime import UTC, datetime
 
-from app.models import BattlePoolItem, CandidateStock
+from app.models import BattlePoolItem, CandidateStock, Position, SystemConfig
 from app.services.freshness import freshness_context
 
 
@@ -44,3 +45,34 @@ def test_freshness_reports_missing_data_explicitly(session):
     assert result["structures"]["status"] == "尚未产生数据"
     assert result["structures"]["last_at"] is None
     assert result["structures"]["next_at"] > datetime(2026, 6, 14, 12, 0)
+
+
+def test_position_freshness_normalizes_database_and_portfolio_timezones(session):
+    session.add(
+        Position(
+            symbol="US.EMR",
+            entry_signal_id=0,
+            entry_price=142,
+            stop_price=139,
+            shares=0,
+            risk_amount=0,
+            status="CLOSED",
+            updated_at=datetime(2026, 6, 15, 15, 20),
+        )
+    )
+    session.add(
+        SystemConfig(
+            key="portfolio_sync_status",
+            value=json.dumps({"updated_at": "2026-06-15T15:20:30+00:00"}),
+        )
+    )
+    session.commit()
+
+    result = freshness_context(
+        session,
+        datetime(2026, 6, 15, 15, 21, tzinfo=UTC),
+        {"positions"},
+    )
+
+    assert result["positions"]["last_at"] == datetime(2026, 6, 15, 15, 20, 30)
+    assert result["positions"]["stale"] is False
