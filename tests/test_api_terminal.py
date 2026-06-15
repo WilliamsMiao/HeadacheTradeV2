@@ -227,11 +227,12 @@ def test_kline_payload_returns_chronological_valid_bars(session):
 
 
 def test_kline_payload_is_empty_safe_and_rejects_unsupported_timeframe(session):
-    assert kline_payload(session, "US.AAPL", "1d")["bars"] == []
+    for timeframe in ("1m", "5m", "15m", "60m", "1d"):
+        assert kline_payload(session, "US.AAPL", timeframe)["bars"] == []
     try:
-        kline_payload(session, "US.AAPL", "5m")
+        kline_payload(session, "US.AAPL", "30m")
     except ValueError as exc:
-        assert "仅支持 60m 和 1d" in str(exc)
+        assert "仅支持 1m、5m、15m、60m 和 1d" in str(exc)
     else:
         raise AssertionError("unsupported timeframe must be rejected")
 

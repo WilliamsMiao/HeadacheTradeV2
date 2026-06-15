@@ -22,14 +22,31 @@ import { useTerminalStore } from '../store/terminalStore';
 export function TerminalPage() {
   const selectedId = useTerminalStore((state) => state.selectedTradePlanId);
   const selectPlan = useTerminalStore((state) => state.selectPlan);
-  const summaryQuery = useQuery({ queryKey: ['terminal-summary'], queryFn: getTerminalSummary });
-  const plansQuery = useQuery({ queryKey: ['trade-plans'], queryFn: getTradePlans });
-  useQuery({ queryKey: ['positions'], queryFn: () => getPositions() });
-  useQuery({ queryKey: ['orders'], queryFn: () => getOrders() });
+  const summaryQuery = useQuery({
+    queryKey: ['terminal-summary'],
+    queryFn: getTerminalSummary,
+    refetchInterval: 30_000,
+  });
+  const plansQuery = useQuery({
+    queryKey: ['trade-plans'],
+    queryFn: getTradePlans,
+    refetchInterval: 30_000,
+  });
+  useQuery({
+    queryKey: ['positions'],
+    queryFn: () => getPositions(),
+    refetchInterval: 15_000,
+  });
+  useQuery({
+    queryKey: ['orders'],
+    queryFn: () => getOrders(),
+    refetchInterval: 15_000,
+  });
   const detailQuery = useQuery({
     queryKey: ['trade-plan-detail', selectedId],
     queryFn: () => getTradePlanDetail(selectedId!),
     enabled: selectedId !== null,
+    refetchInterval: 15_000,
   });
 
   const plans = plansQuery.data?.data ?? [];

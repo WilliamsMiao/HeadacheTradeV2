@@ -5,6 +5,7 @@ import type {
   SimOrder,
   StructureMarker,
   TerminalSummary,
+  Timeframe,
   TradePlan,
   TradePlanDetail,
   TradePlanOverlay,
@@ -26,7 +27,7 @@ export const getOrders = (symbol = '') =>
     symbol ? `/api/sim-orders?symbol=${encodeURIComponent(symbol)}` : '/api/sim-orders',
   );
 
-export const getKlines = (symbol: string, timeframe: '60m' | '1d', limit = 300) =>
+export const getKlines = (symbol: string, timeframe: Timeframe, limit = 300) =>
   apiGet<KlineBar[]>(
     `/api/kline?symbol=${encodeURIComponent(symbol)}&timeframe=${timeframe}&limit=${limit}`,
   );
@@ -36,7 +37,7 @@ export const getTradePlanOverlay = (symbol: string, planId: number) =>
     `/api/trade-plan-overlays?symbol=${encodeURIComponent(symbol)}&plan_id=${planId}`,
   );
 
-export const getStructures = (symbol: string, timeframe: '60m' | '1d') =>
+export const getStructures = (symbol: string, timeframe: Timeframe) =>
   apiGet<StructureMarker[]>(
     `/api/structures?symbol=${encodeURIComponent(symbol)}&timeframe=${timeframe}&limit=100`,
   );

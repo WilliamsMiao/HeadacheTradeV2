@@ -134,7 +134,9 @@ describe('TerminalPage', () => {
     expect(await screen.findByText('模拟交易')).toBeInTheDocument();
     expect(screen.getByText('REAL TRADING DISABLED')).toBeInTheDocument();
     expect(await screen.findByText('AAPL 行情')).toBeInTheDocument();
-    expect(await screen.findByText('当前没有 60 分钟 K 线数据')).toBeInTheDocument();
+    expect(
+      await screen.findByText('当前尚未采集 60 分钟 K 线；可切换到 60 分钟或日线继续查看'),
+    ).toBeInTheDocument();
     expect(await screen.findByText('图中结构事件')).toBeInTheDocument();
     await waitFor(() => expect(screen.getAllByText('持续监控中').length).toBeGreaterThan(0));
   });
