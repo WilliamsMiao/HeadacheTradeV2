@@ -210,10 +210,16 @@ export interface TradePlanDetail {
 export interface Position {
   id: number;
   symbol: string;
+  name: string;
   direction: string;
   status: string;
+  source: string;
+  is_orphan: boolean;
   entry_price: number;
   current_price: number | null;
+  market_value: number;
+  unrealized_pnl: number;
+  unrealized_pnl_pct: number;
   current_r: number;
   max_r: number;
   min_r: number;
@@ -228,6 +234,12 @@ export interface Position {
   entry_order_id: number | null;
   exit_order_id: number | null;
   shares: number;
+  available_shares: number;
+  take_profit_pct: number | null;
+  stop_loss_pct: number | null;
+  last_synced_at: string | null;
+  last_risk_checked_at: string | null;
+  last_error: string;
   created_at: string;
   updated_at: string;
 }

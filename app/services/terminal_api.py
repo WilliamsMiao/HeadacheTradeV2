@@ -586,8 +586,8 @@ def _serialize_trade_plan(session: Session, plan: TradePlan, settings: Settings)
 def _serialize_position(position: Position | None) -> dict | None:
     if position is None:
         return None
-    current_price = None
-    if position.shares and position.risk_amount:
+    current_price = position.current_price
+    if current_price is None and position.shares and position.risk_amount:
         current_price = position.entry_price + position.current_r * position.risk_amount / position.shares
     return {
         "id": position.id,
@@ -610,6 +610,18 @@ def _serialize_position(position: Position | None) -> dict | None:
         "entry_order_id": position.entry_order_id,
         "exit_order_id": position.exit_order_id,
         "shares": position.shares,
+        "available_shares": position.available_shares,
+        "name": position.name,
+        "source": position.source,
+        "is_orphan": position.is_orphan,
+        "market_value": position.market_value,
+        "unrealized_pnl": position.unrealized_pnl,
+        "unrealized_pnl_pct": position.unrealized_pnl_pct,
+        "take_profit_pct": position.take_profit_pct,
+        "stop_loss_pct": position.stop_loss_pct,
+        "last_synced_at": _iso(position.last_synced_at),
+        "last_risk_checked_at": _iso(position.last_risk_checked_at),
+        "last_error": position.last_error,
         "created_at": _iso(position.created_at),
         "updated_at": _iso(position.updated_at),
     }
