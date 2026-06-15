@@ -1,11 +1,19 @@
 import { Alert, Button, Segmented } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useMemo } from 'react';
 
-import { getKlines, getStructures, getTradePlanOverlay } from '../../api/terminal';
+import {
+  getKlines,
+  getOrders,
+  getPositions,
+  getStructures,
+  getTradePlanOverlay,
+} from '../../api/terminal';
 import { useTerminalStore } from '../../store/terminalStore';
 import type { TradePlan } from '../../types/api';
+import { buildOrderMarkers } from '../charts/OrderMarkers';
+import { buildPositionMarkers } from '../charts/PositionMarkers';
 import { EmptyState } from '../common/EmptyState';
 import { LoadingBlock } from '../common/LoadingBlock';
 
@@ -34,9 +42,28 @@ export function MarketChartPanel({ plan }: MarketChartPanelProps) {
     queryFn: () => getStructures(plan.symbol, timeframe),
     enabled: timeframe === '60m',
   });
+  const ordersQuery = useQuery({
+    queryKey: ['orders', plan.symbol],
+    queryFn: () => getOrders(plan.symbol),
+  });
+  const positionsQuery = useQuery({
+    queryKey: ['positions', plan.symbol],
+    queryFn: () => getPositions(plan.symbol),
+  });
   const bars = query.data?.data ?? [];
   const overlayLines = overlayQuery.data?.data.lines ?? [];
   const structures = timeframe === '60m' ? (structuresQuery.data?.data ?? []) : [];
+  const orders = ordersQuery.data?.data ?? [];
+  const positions = positionsQuery.data?.data ?? [];
+  const executions = useMemo(() => {
+    const filledOrderIds = new Set(
+      orders.filter((order) => order.filled_at && order.filled_qty > 0).map((order) => order.id),
+    );
+    return [
+      ...buildOrderMarkers(orders),
+      ...buildPositionMarkers(positions, filledOrderIds),
+    ];
+  }, [orders, positions]);
   const syncedAt = query.data?.meta.synced_at;
 
   return (
@@ -72,6 +99,7 @@ export function MarketChartPanel({ plan }: MarketChartPanelProps) {
         <span>
           最新 K 线：{syncedAt ? new Date(syncedAt).toLocaleString('zh-CN', { hour12: false }) : '尚无数据'}
         </span>
+        <span>成交与持仓标记：{executions.length} 项</span>
       </div>
       <div className="chart-surface">
         {query.isLoading ? <LoadingBlock /> : null}
@@ -89,7 +117,12 @@ export function MarketChartPanel({ plan }: MarketChartPanelProps) {
         ) : null}
         {!query.isLoading && !query.isError && bars.length > 0 ? (
           <Suspense fallback={<LoadingBlock />}>
-            <KlineChart bars={bars} overlayLines={overlayLines} structures={structures} />
+            <KlineChart
+              bars={bars}
+              executions={executions}
+              overlayLines={overlayLines}
+              structures={structures}
+            />
           </Suspense>
         ) : null}
       </div>

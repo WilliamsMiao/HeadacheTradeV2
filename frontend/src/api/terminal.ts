@@ -18,9 +18,13 @@ export const getTradePlans = () =>
 export const getTradePlanDetail = (id: number) =>
   apiGet<TradePlanDetail>(`/api/trade-plans/${id}`);
 
-export const getPositions = () => apiGet<Position[]>('/api/positions');
+export const getPositions = (symbol = '') =>
+  apiGet<Position[]>(symbol ? `/api/positions?symbol=${encodeURIComponent(symbol)}` : '/api/positions');
 
-export const getOrders = () => apiGet<SimOrder[]>('/api/sim-orders');
+export const getOrders = (symbol = '') =>
+  apiGet<SimOrder[]>(
+    symbol ? `/api/sim-orders?symbol=${encodeURIComponent(symbol)}` : '/api/sim-orders',
+  );
 
 export const getKlines = (symbol: string, timeframe: '60m' | '1d', limit = 300) =>
   apiGet<KlineBar[]>(

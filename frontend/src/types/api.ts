@@ -49,6 +49,16 @@ export interface StructureMarker {
   linked_trade_plan_id: number | null;
 }
 
+export interface ExecutionMarker {
+  id: string;
+  time: number;
+  price: number;
+  position: 'aboveBar' | 'belowBar';
+  shape: 'arrowUp' | 'arrowDown' | 'circle' | 'square';
+  color: string;
+  text: string;
+}
+
 export interface StatusPresentation {
   code: string;
   display_name: string;
@@ -162,6 +172,10 @@ export interface Position {
   next_system_action: string;
   exit_reason: string;
   source_trade_plan_id: number | null;
+  entry_order_id: number | null;
+  exit_order_id: number | null;
+  shares: number;
+  created_at: string;
   updated_at: string;
 }
 

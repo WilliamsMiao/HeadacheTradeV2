@@ -371,6 +371,10 @@ def _serialize_position(position: Position | None) -> dict | None:
         "next_system_action": describe_position_next_action(position),
         "exit_reason": position.exit_reason,
         "source_trade_plan_id": position.source_trade_plan_id,
+        "entry_order_id": position.entry_order_id,
+        "exit_order_id": position.exit_order_id,
+        "shares": position.shares,
+        "created_at": _iso(position.created_at),
         "updated_at": _iso(position.updated_at),
     }
 

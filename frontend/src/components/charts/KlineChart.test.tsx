@@ -27,6 +27,7 @@ describe('KlineChart', () => {
         bars={[
           { time: 1718208000, open: 100, high: 102, low: 99, close: 101, volume: 123456 },
         ]}
+        executions={[]}
         overlayLines={[]}
         structures={[]}
       />,
