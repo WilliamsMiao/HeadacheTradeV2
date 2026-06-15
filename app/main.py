@@ -71,7 +71,7 @@ from app.services.workbench import (
 )
 from app.services.command_center import command_center_payload
 from app.services.plan_prices import refresh_trade_plan_prices
-from app.services.portfolio_manager import portfolio_sync_status
+from app.services.portfolio_manager import futu_position_snapshot, portfolio_sync_status
 from app.services.freshness import freshness_context
 from app.providers.futu_provider import FutuProvider
 from app.services.view_models import (
@@ -396,6 +396,16 @@ def positions_api(symbol: str = "", session: Session = Depends(get_session)):
     return response_envelope(positions, source="FUTU_SIM_ACCOUNT", synced_at=synced_at)
 
 
+@app.get("/api/futu-positions")
+def futu_positions_api(session: Session = Depends(get_session)):
+    sync = portfolio_sync_status(session)
+    return response_envelope(
+        futu_position_snapshot(session),
+        source="FUTU_SIM_ACCOUNT",
+        synced_at=sync.get("updated_at"),
+    )
+
+
 @app.get("/api/sim-orders")
 def sim_orders_api(symbol: str = "", session: Session = Depends(get_session)):
     orders = orders_payload(session, symbol)
@@ -495,7 +505,16 @@ def sim_orders_page(request: Request, session: Session = Depends(get_session)):
 @app.get("/positions", response_class=HTMLResponse)
 def positions_page(request: Request, session: Session = Depends(get_session)):
     positions = list(session.scalars(select(Position).order_by(Position.updated_at.desc()).limit(300)))
-    return templates.TemplateResponse(request, "positions.html", {"positions": position_view_models(session, positions), "freshness": freshness_context(session, sections={"positions"})["positions"]})
+    return templates.TemplateResponse(
+        request,
+        "positions.html",
+        {
+            "positions": position_view_models(session, positions),
+            "futu_positions": futu_position_snapshot(session),
+            "portfolio_sync": portfolio_sync_status(session),
+            "freshness": freshness_context(session, sections={"positions"})["positions"],
+        },
+    )
 
 
 @app.get("/journal", response_class=HTMLResponse)
