@@ -581,6 +581,42 @@ a:focus-visible {
   color: #737373;
 }
 
+.review-panel {
+  margin-top: 12px;
+  padding: 16px;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.review-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.review-charts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.review-charts h3,
+.review-panel > h3 {
+  font-size: 14px;
+}
+
+.stats-chart {
+  width: 100%;
+  height: 280px;
+}
+
+.review-note {
+  color: #737373;
+  font-size: 13px;
+}
+
 .loading-block {
   padding: 24px;
 }
@@ -633,11 +669,15 @@ a:focus-visible {
   .center-workspace {
     min-height: 560px;
   }
+  .review-charts {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 520px) {
   .terminal-metrics,
-  .chart-plan-summary {
+  .chart-plan-summary,
+  .review-metrics {
     grid-template-columns: 1fr;
   }
   .metric-card__value {

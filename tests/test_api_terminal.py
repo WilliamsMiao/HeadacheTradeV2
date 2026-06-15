@@ -14,6 +14,9 @@ from app.models import (
     TradePlan,
 )
 from app.services.terminal_api import (
+    daily_stats_payload,
+    first_valid_trade_payload,
+    journal_summary_payload,
     kline_payload,
     orders_payload,
     positions_payload,
@@ -214,6 +217,64 @@ def test_timeline_payload_is_empty_safe_and_requires_symbol(session):
         assert "股票代码不能为空" in str(exc)
     else:
         raise AssertionError("blank symbol must be rejected")
+
+
+def test_journal_summary_uses_closed_positions_only_and_calculates_drawdown(session):
+    session.add_all([
+        Position(symbol="US.WIN", status="CLOSED", entry_price=100, stop_price=95,
+                 shares=10, risk_amount=50, current_r=2),
+        Position(symbol="US.LOSS", status="CLOSED", entry_price=100, stop_price=95,
+                 shares=10, risk_amount=50, current_r=-1),
+        Position(symbol="US.OPEN", status="OPEN", entry_price=100, stop_price=95,
+                 shares=10, risk_amount=50, current_r=5),
+    ])
+    session.commit()
+
+    payload = journal_summary_payload(session)
+
+    assert payload["closed_trades"] == 2
+    assert payload["wins"] == 1
+    assert payload["win_rate"] == 0.5
+    assert payload["cumulative_r"] == 1
+    assert payload["max_drawdown_r"] == -1
+    assert len(payload["curve"]) == 2
+
+
+def test_daily_stats_groups_rejections_and_marks_missed_follow_up_as_observation(session):
+    plan = _plan()
+    plan.status = "MISSED_BY_CAPITAL"
+    plan.missed_by_capital_price = 100
+    plan.current_price = 105
+    session.add_all([
+        plan,
+        AuditLog(action="RULES_REJECTED", symbol="US.AAPL", status="REJECTED",
+                 reason="市场风险较高"),
+        AuditLog(action="RULES_REJECTED", symbol="US.MSFT", status="REJECTED",
+                 reason="市场风险较高"),
+    ])
+    session.commit()
+
+    payload = daily_stats_payload(session)
+
+    assert payload["rejection_reasons"][0] == {"reason": "市场风险较高", "count": 2}
+    assert payload["missed_opportunities"][0]["follow_up_pct"] == 5
+    assert payload["missed_opportunities"][0]["status_display_name"] == "资金占用错过"
+
+
+def test_first_valid_trade_uses_first_real_position_of_each_day(session):
+    session.add_all([
+        Position(symbol="US.FIRST", status="CLOSED", entry_price=100, stop_price=95,
+                 shares=10, risk_amount=50, current_r=1),
+        Position(symbol="US.SECOND", status="CLOSED", entry_price=100, stop_price=95,
+                 shares=10, risk_amount=50, current_r=2),
+    ])
+    session.commit()
+
+    payload = first_valid_trade_payload(session)
+
+    assert len(payload) == 1
+    assert payload[0]["symbol"] == "US.FIRST"
+    assert payload[0]["result_r"] == 1
 
 
 def test_position_and_order_payloads_keep_raw_numeric_values(session):

@@ -72,6 +72,46 @@ export interface TimelineEvent {
   linked_entity_id: number | null;
 }
 
+export interface JournalSummary {
+  closed_trades: number;
+  wins: number;
+  losses: number;
+  win_rate: number;
+  average_r: number;
+  cumulative_r: number;
+  max_drawdown_r: number;
+  curve: Array<{
+    trade_number: number;
+    time: string;
+    symbol: string;
+    trade_r: number;
+    cumulative_r: number;
+  }>;
+}
+
+export interface DailyStats {
+  rejection_reasons: Array<{ reason: string; count: number }>;
+  missed_opportunities: Array<{
+    plan_id: number;
+    symbol: string;
+    status: string;
+    status_display_name: string;
+    reference_price: number | null;
+    current_price: number | null;
+    follow_up_pct: number | null;
+    updated_at: string;
+  }>;
+}
+
+export interface FirstValidTrade {
+  date: string;
+  position_id: number;
+  symbol: string;
+  status: string;
+  result_r: number;
+  created_at: string;
+}
+
 export interface StatusPresentation {
   code: string;
   display_name: string;

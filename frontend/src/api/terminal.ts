@@ -1,6 +1,9 @@
 import { apiGet } from './client';
 import type {
   KlineBar,
+  DailyStats,
+  FirstValidTrade,
+  JournalSummary,
   Position,
   SimOrder,
   StructureMarker,
@@ -47,3 +50,12 @@ export const getTimeline = (symbol: string, limit = 100) =>
   apiGet<TimelineEvent[]>(
     `/api/timeline?symbol=${encodeURIComponent(symbol)}&limit=${limit}`,
   );
+
+export const getJournalSummary = () =>
+  apiGet<JournalSummary>('/api/journal/summary');
+
+export const getDailyStats = () =>
+  apiGet<DailyStats>('/api/stats/daily');
+
+export const getFirstValidTrades = () =>
+  apiGet<FirstValidTrade[]>('/api/stats/first-valid-trade');

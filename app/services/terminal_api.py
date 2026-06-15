@@ -1,5 +1,7 @@
 from datetime import UTC, datetime
 
+from collections import Counter
+
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -322,6 +324,110 @@ def timeline_payload(session: Session, symbol: str, limit: int = 100) -> list[di
     events = [event for event in events if event["time"]]
     events.sort(key=lambda event: (event["time"], event["id"]), reverse=True)
     return events[:bounded_limit]
+
+
+def journal_summary_payload(session: Session) -> dict:
+    positions = list(
+        session.scalars(
+            select(Position)
+            .where(Position.status != "OPEN")
+            .order_by(Position.updated_at, Position.id)
+        )
+    )
+    cumulative_r = 0.0
+    peak_r = 0.0
+    max_drawdown_r = 0.0
+    curve = []
+    for index, position in enumerate(positions, start=1):
+        cumulative_r += float(position.current_r)
+        peak_r = max(peak_r, cumulative_r)
+        max_drawdown_r = min(max_drawdown_r, cumulative_r - peak_r)
+        curve.append({
+            "trade_number": index,
+            "time": _iso(position.updated_at),
+            "symbol": position.symbol,
+            "trade_r": float(position.current_r),
+            "cumulative_r": round(cumulative_r, 4),
+        })
+    wins = sum(position.current_r > 0 for position in positions)
+    return {
+        "closed_trades": len(positions),
+        "wins": wins,
+        "losses": sum(position.current_r < 0 for position in positions),
+        "win_rate": round(wins / len(positions), 4) if positions else 0.0,
+        "average_r": round(cumulative_r / len(positions), 4) if positions else 0.0,
+        "cumulative_r": round(cumulative_r, 4),
+        "max_drawdown_r": round(max_drawdown_r, 4),
+        "curve": curve,
+    }
+
+
+def daily_stats_payload(session: Session) -> dict:
+    rejection_logs = list(
+        session.scalars(
+            select(AuditLog)
+            .where(AuditLog.action.in_({"RULES_REJECTED", "MISSED_BY_CAPITAL"}))
+            .order_by(AuditLog.created_at.desc())
+            .limit(1000)
+        )
+    )
+    reasons = Counter(log.reason.strip() or AUDIT_ACTION_NAMES.get(log.action, "其他阻塞") for log in rejection_logs)
+    rejection_reasons = [
+        {"reason": reason, "count": count}
+        for reason, count in sorted(reasons.items(), key=lambda item: (-item[1], item[0]))
+    ]
+
+    missed_plans = list(
+        session.scalars(
+            select(TradePlan)
+            .where(TradePlan.status.in_({"NO_CHASE", "MISSED_BY_CAPITAL"}))
+            .order_by(TradePlan.updated_at.desc())
+            .limit(300)
+        )
+    )
+    missed_opportunities = []
+    for plan in missed_plans:
+        reference_price = (
+            plan.missed_by_capital_price
+            if plan.status == "MISSED_BY_CAPITAL"
+            else plan.no_chase_above
+        )
+        follow_up_pct = None
+        if reference_price and plan.current_price:
+            follow_up_pct = round((plan.current_price / reference_price - 1) * 100, 4)
+        missed_opportunities.append({
+            "plan_id": plan.id,
+            "symbol": plan.symbol,
+            "status": plan.status,
+            "status_display_name": status_for(plan.status).display_name,
+            "reference_price": reference_price,
+            "current_price": plan.current_price,
+            "follow_up_pct": follow_up_pct,
+            "updated_at": _iso(plan.updated_at),
+        })
+    return {
+        "rejection_reasons": rejection_reasons,
+        "missed_opportunities": missed_opportunities,
+    }
+
+
+def first_valid_trade_payload(session: Session) -> list[dict]:
+    positions = list(session.scalars(select(Position).order_by(Position.created_at, Position.id)))
+    first_by_day: dict[str, Position] = {}
+    for position in positions:
+        day = _as_utc(position.created_at).date().isoformat()
+        first_by_day.setdefault(day, position)
+    return [
+        {
+            "date": day,
+            "position_id": position.id,
+            "symbol": position.symbol,
+            "status": position.status,
+            "result_r": float(position.current_r),
+            "created_at": _iso(position.created_at),
+        }
+        for day, position in sorted(first_by_day.items(), reverse=True)
+    ]
 
 
 def kline_payload(session: Session, symbol: str, timeframe: str, limit: int = 300) -> dict:

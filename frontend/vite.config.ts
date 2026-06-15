@@ -10,6 +10,7 @@ export default defineConfig({
         manualChunks: {
           'vendor-ui': ['react', 'react-dom', 'antd', '@ant-design/icons'],
           'vendor-state': ['@tanstack/react-query', 'zustand'],
+          'vendor-charts': ['echarts'],
         },
       },
     },
