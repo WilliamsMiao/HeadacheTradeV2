@@ -48,7 +48,7 @@ def freshness_context(
         local_position_at = _max_value(session, Position.updated_at)
         portfolio_at = _parse_datetime(portfolio_sync_status(session).get("updated_at"))
         last_position_sync = max(
-            (value for value in (local_position_at, portfolio_at) if value),
+            (_as_utc(value) for value in (local_position_at, portfolio_at) if value),
             default=None,
         )
         contexts["positions"] = _freshness(last_position_sync, _next_sim_refresh(now_utc), "模拟交易循环", now_utc, 3)
