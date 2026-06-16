@@ -1,5 +1,5 @@
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
@@ -12,6 +12,14 @@ from app.services.position_sync import normalize_symbol
 
 
 logger = logging.getLogger(__name__)
+
+EXIT_RETRY_REASONS = {
+    "HARD_STOP",
+    "ORPHAN_TAKE_PROFIT",
+    "TARGET_2_OR_TRAILING",
+    "FORCED_INTRADAY_EXIT",
+    "TARGET_1_PARTIAL",
+}
 
 
 def manage_positions(session: Session, quote_provider, trade_provider, settings: Settings) -> dict[str, int]:
@@ -145,13 +153,37 @@ def _manage_position(
         )
         session.commit()
         return "SKIPPED"
-    if session.scalar(
-        select(SimOrder).where(
-            SimOrder.symbol == position.symbol,
-            SimOrder.side == "SELL",
-            SimOrder.status.in_({"SUBMITTED", "PARTIALLY_FILLED"}),
-        )
-    ):
+    active_order = _active_exit_order_exists(session, position)
+    if active_order:
+        session.commit()
+        return "HELD"
+    retry_order = _retryable_waiting_exit_order(session, position, settings)
+    if retry_order:
+        if not _remote_or_recent_position_exists(trade_provider, position):
+            session.commit()
+            return "HELD"
+        next_retry_count = (retry_order.retry_count or 0) + 1
+        if next_retry_count > settings.max_exit_order_retries:
+            message = "风控退出单达到最大重试次数，需要人工检查富途账户"
+            if position.last_error != message:
+                position.last_error = message
+                write_audit(
+                    session,
+                    "EXIT_ORDER_RETRY_LIMIT_REACHED",
+                    symbol=position.symbol,
+                    subject_type="Position",
+                    subject_id=position.id,
+                    status="FAILED",
+                    reason=message,
+                    payload={
+                        "previous_order_id": retry_order.id,
+                        "previous_futu_order_id": retry_order.futu_order_id,
+                        "retry_count": retry_order.retry_count or 0,
+                    },
+                )
+            session.commit()
+            return "HELD"
+    elif _waiting_exit_order_before_retry_window(session, position, settings):
         session.commit()
         return "HELD"
 
@@ -168,6 +200,7 @@ def _manage_position(
             futu_order_id=str(response.get("order_id") or ""),
             status="SUBMITTED",
             reason=reason,
+            retry_count=next_retry_count if retry_order else 0,
         )
         session.add(order)
         position.exit_reason = reason
@@ -186,6 +219,22 @@ def _manage_position(
             reason=reason,
             payload={"price": exit_price, "last_price": current, "qty": quantity, "futu_order_id": order.futu_order_id},
         )
+        if retry_order:
+            write_audit(
+                session,
+                "EXIT_ORDER_RETRIED",
+                symbol=position.symbol,
+                subject_type="Position",
+                subject_id=position.id,
+                payload={
+                    "previous_order_id": retry_order.id,
+                    "previous_futu_order_id": retry_order.futu_order_id,
+                    "retry_count": next_retry_count,
+                    "qty": quantity,
+                    "exit_price": exit_price,
+                    "exit_reason": reason,
+                },
+            )
         session.commit()
         return "SUBMITTED"
     except Exception as exc:
@@ -223,6 +272,85 @@ def _exit_limit_price(row: dict | None, current: float) -> float:
             bid = 0.0
     reference = bid if bid > 0 else current * 0.995
     return round(max(reference, 0.01), 2)
+
+
+def _active_exit_order_exists(session: Session, position: Position) -> SimOrder | None:
+    aliases = _symbol_aliases(position.symbol)
+    return session.scalar(
+        select(SimOrder)
+        .where(
+            SimOrder.symbol.in_(aliases),
+            SimOrder.side == "SELL",
+            SimOrder.status.in_({"SUBMITTED", "PARTIALLY_FILLED"}),
+        )
+        .order_by(SimOrder.submitted_at.desc(), SimOrder.id.desc())
+        .limit(1)
+    )
+
+
+def _retryable_waiting_exit_order(session: Session, position: Position, settings: Settings) -> SimOrder | None:
+    aliases = _symbol_aliases(position.symbol)
+    cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(seconds=settings.sell_reconcile_retry_seconds)
+    candidates = session.scalars(
+        select(SimOrder)
+        .where(
+            SimOrder.symbol.in_(aliases),
+            SimOrder.side == "SELL",
+            SimOrder.status == "SELL_WAITING_RECONCILIATION",
+            SimOrder.submitted_at <= cutoff,
+        )
+        .order_by(SimOrder.submitted_at.desc(), SimOrder.id.desc())
+    )
+    for order in candidates:
+        if _exit_reason_retryable(order.reason) or position.exit_reason in EXIT_RETRY_REASONS:
+            return order
+    return None
+
+
+def _waiting_exit_order_before_retry_window(session: Session, position: Position, settings: Settings) -> bool:
+    aliases = _symbol_aliases(position.symbol)
+    cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(seconds=settings.sell_reconcile_retry_seconds)
+    return bool(
+        session.scalar(
+            select(SimOrder.id)
+            .where(
+                SimOrder.symbol.in_(aliases),
+                SimOrder.side == "SELL",
+                SimOrder.status == "SELL_WAITING_RECONCILIATION",
+                SimOrder.submitted_at > cutoff,
+            )
+            .limit(1)
+        )
+    )
+
+
+def _remote_or_recent_position_exists(trade_provider, position: Position) -> bool:
+    try:
+        rows = trade_provider.get_positions()
+    except AttributeError:
+        return position.shares > 0
+    except Exception:
+        return position.shares > 0 and position.last_synced_at is not None
+    aliases = _symbol_aliases(position.symbol)
+    for row in rows:
+        symbol = normalize_symbol(row.get("code") or row.get("symbol"))
+        try:
+            quantity = int(float(row.get("qty") or row.get("quantity") or 0))
+        except (TypeError, ValueError):
+            quantity = 0
+        if symbol in aliases and quantity > 0:
+            return True
+    return position.shares > 0 and position.last_synced_at is not None
+
+
+def _symbol_aliases(symbol: str) -> set[str]:
+    normalized = normalize_symbol(symbol)
+    return {normalized, normalized.removeprefix("US.")}
+
+
+def _exit_reason_retryable(reason: str | None) -> bool:
+    text = reason or ""
+    return any(item in text for item in EXIT_RETRY_REASONS)
 
 
 def _near_close(now: datetime | None = None) -> bool:

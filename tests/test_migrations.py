@@ -115,3 +115,31 @@ def test_position_without_signal_is_compatible_with_legacy_not_null_column():
         session.commit()
 
         assert position.entry_signal_id == 0
+
+
+def test_reconciliation_issues_table_is_created_for_existing_sqlite_database():
+    engine = create_engine("sqlite:///:memory:")
+
+    _migrate_sqlite_schema(engine)
+    _migrate_sqlite_schema(engine)
+
+    inspector = inspect(engine)
+    columns = {column["name"] for column in inspector.get_columns("reconciliation_issues")}
+    indexes = {index["name"] for index in inspector.get_indexes("reconciliation_issues")}
+    assert {
+        "symbol",
+        "issue_type",
+        "severity",
+        "status",
+        "remote_order_id",
+        "local_order_id",
+        "position_id",
+        "trade_plan_id",
+        "reason",
+        "payload_json",
+        "first_seen_at",
+        "last_seen_at",
+        "resolved_at",
+    }.issubset(columns)
+    assert "ix_reconciliation_issues_symbol" in indexes
+    assert "ix_reconciliation_issues_last_seen_at" in indexes

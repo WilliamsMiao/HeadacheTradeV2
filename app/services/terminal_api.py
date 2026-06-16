@@ -12,6 +12,7 @@ from app.models import (
     CandidateStock,
     KLine,
     Position,
+    ReconciliationIssue,
     SimOrder,
     StructureEvent,
     TradePlan,
@@ -22,6 +23,7 @@ from app.services.command_center import plan_view_model
 from app.services.next_action import describe_position_next_action
 from app.services.portfolio_manager import portfolio_sync_status
 from app.services.risk_control import effective_risk_settings
+from app.services.trade_reconciler import reconciliation_gate_status
 
 
 ACTIVE_PLAN_STATUSES = {
@@ -68,10 +70,12 @@ def terminal_summary(session: Session, settings: Settings) -> dict:
     ) or 0
     realized_r = session.scalar(
         select(func.coalesce(func.sum(Position.current_r), 0)).where(
-            Position.status != "OPEN",
+            Position.status == "CLOSED",
+            Position.close_verified.is_(True),
             func.date(Position.updated_at) == today,
         )
     ) or 0
+    reconciliation = _reconciliation_summary(session)
     equity_ok = (
         portfolio.get("ok") is True
         and portfolio.get("account_equity_source") == "FUTU_SIM_ACCOUNT"
@@ -113,6 +117,45 @@ def terminal_summary(session: Session, settings: Settings) -> dict:
         "max_positions": effective.max_positions,
         "can_open_new_position": can_open,
         "risk_stop_reason": stop_reason or None,
+        "reconciliation": reconciliation,
+    }
+
+
+def _reconciliation_summary(session: Session) -> dict:
+    gate = reconciliation_gate_status(session)
+    if gate is not None:
+        return {
+            "open_issues": int(gate.get("open_issues") or 0),
+            "critical_issues": int(gate.get("critical_issues") or 0),
+            "high_issues": int(gate.get("high_issues") or 0),
+            "severity": str(gate.get("severity") or "INFO"),
+            "allow_new_entries": bool(gate.get("allow_new_entries")),
+            "mode": str(gate.get("mode") or "NORMAL"),
+            "reason": str(gate.get("reason") or ""),
+            "last_checked_at": _iso(gate.get("updated_at")),
+        }
+    open_issues = list(
+        session.scalars(
+            select(ReconciliationIssue).where(ReconciliationIssue.status == "OPEN")
+        )
+    )
+    severity_rank = {"INFO": 0, "WARN": 1, "HIGH": 2, "CRITICAL": 3}
+    severity = "INFO"
+    for issue in open_issues:
+        if severity_rank.get(issue.severity, 0) > severity_rank[severity]:
+            severity = issue.severity
+    critical_issues = sum(issue.severity == "CRITICAL" for issue in open_issues)
+    high_issues = sum(issue.severity == "HIGH" for issue in open_issues)
+    last_checked_at = session.scalar(select(func.max(ReconciliationIssue.last_seen_at)))
+    return {
+        "open_issues": len(open_issues),
+        "critical_issues": critical_issues,
+        "high_issues": high_issues,
+        "severity": severity,
+        "allow_new_entries": critical_issues == 0 and high_issues == 0,
+        "mode": "PROTECTIVE" if critical_issues or high_issues else "DEGRADED" if open_issues else "NORMAL",
+        "reason": "存在高风险对账问题，禁止新开仓，仅允许风控退出" if critical_issues or high_issues else "系统账本一致，允许新开仓" if not open_issues else "存在轻微对账提示，允许新开仓",
+        "last_checked_at": _iso(last_checked_at),
     }
 
 
@@ -617,6 +660,10 @@ def _serialize_position(position: Position | None) -> dict | None:
         "market_value": position.market_value,
         "unrealized_pnl": position.unrealized_pnl,
         "unrealized_pnl_pct": position.unrealized_pnl_pct,
+        "exit_price": position.exit_price,
+        "realized_pnl": position.realized_pnl,
+        "close_verified": position.close_verified,
+        "close_source": position.close_source,
         "take_profit_pct": position.take_profit_pct,
         "stop_loss_pct": position.stop_loss_pct,
         "last_synced_at": _iso(position.last_synced_at),

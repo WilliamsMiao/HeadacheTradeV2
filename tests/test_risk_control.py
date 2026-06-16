@@ -1,5 +1,6 @@
 from app.config import Settings
-from app.models import AuditLog
+from app.models import AuditLog, Position
+from app.services.rules_approval import _daily_risk_block
 from app.services.risk_control import effective_risk_settings, update_risk_settings
 
 
@@ -39,3 +40,39 @@ def test_dangerous_risk_per_trade_is_rejected(session):
         assert "不得超过 5%" in str(exc)
     else:
         raise AssertionError("dangerous configuration must be rejected")
+
+
+def test_closed_unverified_is_excluded_from_daily_loss_blocks(session):
+    session.add(
+        Position(
+            symbol="US.UNV",
+            status="CLOSED_UNVERIFIED",
+            entry_price=100,
+            stop_price=95,
+            shares=0,
+            available_shares=0,
+            risk_amount=500,
+            current_r=-3,
+            close_verified=False,
+        )
+    )
+    session.commit()
+
+    assert _daily_risk_block(session, Settings(max_consecutive_losses=1)) == ""
+
+    session.add(
+        Position(
+            symbol="US.VER",
+            status="CLOSED",
+            entry_price=100,
+            stop_price=95,
+            shares=0,
+            available_shares=0,
+            risk_amount=500,
+            current_r=-1,
+            close_verified=True,
+        )
+    )
+    session.commit()
+
+    assert _daily_risk_block(session, Settings(max_consecutive_losses=1)) == "已达到最大连续亏损次数"

@@ -89,7 +89,7 @@ def test_risk_sell_order_is_not_cancelled_by_entry_timeout(session):
     result = sync_sim_orders(session, MissingOrderProvider(), timeout_seconds=60)
 
     assert result["missing"] == 1
-    assert order.status == "SUBMITTED"
+    assert order.status == "SELL_WAITING_RECONCILIATION"
     assert "风控卖出单" in order.reason
 
 
@@ -122,3 +122,34 @@ def test_partial_exit_flag_updates_only_after_filled_sell_order(session):
     assert position.shares == 5
     assert position.partial_exit_done is True
     assert position.stop_price == 100
+
+
+def test_filled_sell_order_closes_position_as_verified(session):
+    position = Position(
+        symbol="US.EMR",
+        status="OPEN",
+        entry_price=100,
+        stop_price=95,
+        shares=5,
+        available_shares=5,
+        risk_amount=25,
+    )
+    order = SimOrder(
+        symbol="US.EMR",
+        side="SELL",
+        qty=5,
+        limit_price=105,
+        futu_order_id="sell-1",
+        status="SUBMITTED",
+        reason="HARD_STOP",
+    )
+    session.add_all([position, order])
+    session.commit()
+
+    sync_sim_orders(session, FilledSellProvider())
+
+    assert position.status == "CLOSED"
+    assert position.close_verified is True
+    assert position.exit_price == 106
+    assert position.realized_pnl == 30
+    assert position.close_source == "SELL_ORDER_FILLED"

@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     max_daily_loss_pct: float = 0.015
     max_consecutive_losses: int = 3
     entry_order_timeout_seconds: int = 60
+    sell_reconcile_retry_seconds: int = 120
+    max_exit_order_retries: int = 3
+    buy_order_match_window_minutes: int = 240
     orphan_take_profit_pct: float = 0.03
     orphan_stop_loss_pct: float = 0.02
     force_intraday_exit: bool = True
