@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import Settings
-from app.models import Position, TradePlan
+from app.models import Position, SimOrder, TradePlan
 from app.services.audit import write_audit
 
 
@@ -55,6 +55,7 @@ def sync_futu_positions_to_local(
 
         aliases = {symbol, symbol.removeprefix("US.")}
         position = session.scalar(select(Position).where(Position.symbol.in_(aliases)))
+        matching_buy_order = _matching_unresolved_buy_order(session, aliases)
         if position is None:
             position = Position(
                 symbol=symbol,
@@ -64,8 +65,10 @@ def sync_futu_positions_to_local(
                 stop_price=cost * (1 - settings.orphan_stop_loss_pct),
                 shares=quantity,
                 risk_amount=cost * settings.orphan_stop_loss_pct * quantity,
-                source="FUTU_DETECTED",
-                is_orphan=True,
+                source="LOCAL_AND_FUTU_CONFIRMED" if matching_buy_order else "FUTU_DETECTED",
+                is_orphan=matching_buy_order is None,
+                source_trade_plan_id=matching_buy_order.trade_plan_id if matching_buy_order else None,
+                entry_order_id=matching_buy_order.id if matching_buy_order else None,
                 take_profit_pct=settings.orphan_take_profit_pct,
                 stop_loss_pct=settings.orphan_stop_loss_pct,
                 target_1=cost * (1 + settings.orphan_take_profit_pct),
@@ -74,7 +77,26 @@ def sync_futu_positions_to_local(
             session.add(position)
             session.flush()
             created += 1
-            logger.warning("[SYNC] 本地不存在 %s 持仓，创建 orphan position", symbol)
+            if matching_buy_order:
+                matching_buy_order.status = "FILLED_INFERRED"
+                matching_buy_order.dealt_qty = quantity
+                matching_buy_order.dealt_avg_price = cost
+                if matching_buy_order.trade_plan_id:
+                    plan = session.get(TradePlan, matching_buy_order.trade_plan_id)
+                    if plan:
+                        plan.status = "IN_POSITION"
+                logger.warning("[SYNC] 本地不存在 %s 持仓，但匹配到入场订单，创建 confirmed position", symbol)
+                write_audit(
+                    session,
+                    "SIM_ORDER_FILLED_INFERRED",
+                    symbol=symbol,
+                    subject_type="SimOrder",
+                    subject_id=matching_buy_order.id,
+                    status="FILLED_INFERRED",
+                    reason="Futu 持仓存在，推断入场订单已成交",
+                )
+            else:
+                logger.warning("[SYNC] 本地不存在 %s 持仓，创建 orphan position", symbol)
             write_audit(
                 session,
                 "ORPHAN_POSITION_DETECTED",
@@ -82,7 +104,11 @@ def sync_futu_positions_to_local(
                 subject_type="Position",
                 subject_id=position.id,
                 status="OPEN",
-                reason="Futu 模拟账户存在持仓，但本地没有对应持仓记录",
+                reason=(
+                    "Futu 模拟账户存在持仓，已反向绑定本地入场订单"
+                    if matching_buy_order
+                    else "Futu 模拟账户存在持仓，但本地没有对应持仓记录"
+                ),
             )
         else:
             updated += 1
@@ -143,6 +169,19 @@ def normalize_symbol(value) -> str:
     if not symbol:
         return ""
     return symbol if "." in symbol else f"US.{symbol}"
+
+
+def _matching_unresolved_buy_order(session: Session, aliases: set[str]) -> SimOrder | None:
+    return session.scalar(
+        select(SimOrder)
+        .where(
+            SimOrder.symbol.in_(aliases),
+            SimOrder.side == "BUY",
+            SimOrder.status.in_({"SUBMITTED", "PARTIALLY_FILLED", "UNKNOWN_REMOTE_MISSING"}),
+        )
+        .order_by(SimOrder.submitted_at.desc(), SimOrder.id.desc())
+        .limit(1)
+    )
 
 
 def _float_value(value) -> float:

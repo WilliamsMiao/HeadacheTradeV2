@@ -111,8 +111,6 @@ def _manage_position(
     elif position.target_1 and current >= position.target_1 and not position.partial_exit_done:
         quantity = min(position.available_shares, max(1, position.shares // 2))
         reason = "TARGET_1_PARTIAL"
-        position.partial_exit_done = True
-        position.stop_price = max(position.stop_price, position.entry_price)
     elif position.current_r >= 1.5:
         position.trailing_stop_price = max(
             position.trailing_stop_price or position.stop_price,
@@ -158,14 +156,15 @@ def _manage_position(
         return "HELD"
 
     try:
-        response = trade_provider.place_simulated_order(position.symbol, "SELL", quantity, current)
+        exit_price = _exit_limit_price(snapshot, current)
+        response = trade_provider.place_simulated_order(position.symbol, "SELL", quantity, exit_price)
         order = SimOrder(
             trade_plan_id=position.source_trade_plan_id,
             symbol=position.symbol,
             side="SELL",
             qty=quantity,
-            limit_price=current,
-            submitted_price=current,
+            limit_price=exit_price,
+            submitted_price=exit_price,
             futu_order_id=str(response.get("order_id") or ""),
             status="SUBMITTED",
             reason=reason,
@@ -185,7 +184,7 @@ def _manage_position(
             subject_type="Position",
             subject_id=position.id,
             reason=reason,
-            payload={"price": current, "qty": quantity, "futu_order_id": order.futu_order_id},
+            payload={"price": exit_price, "last_price": current, "qty": quantity, "futu_order_id": order.futu_order_id},
         )
         session.commit()
         return "SUBMITTED"
@@ -213,6 +212,17 @@ def _snapshot_price(row: dict | None) -> float:
         return float(row.get("last_price") or row.get("cur_price") or row.get("nominal_price") or 0)
     except (TypeError, ValueError):
         return 0
+
+
+def _exit_limit_price(row: dict | None, current: float) -> float:
+    bid = 0.0
+    if row:
+        try:
+            bid = float(row.get("bid_price") or row.get("bid_price_1") or 0)
+        except (TypeError, ValueError):
+            bid = 0.0
+    reference = bid if bid > 0 else current * 0.995
+    return round(max(reference, 0.01), 2)
 
 
 def _near_close(now: datetime | None = None) -> bool:
