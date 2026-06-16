@@ -1,5 +1,5 @@
 from app.config import Settings
-from app.models import AuditLog, Position, SimOrder
+from app.models import AuditLog, Position, SimOrder, TradePlan
 from app.services.position_manager import manage_positions
 from app.services.position_sync import sync_futu_positions_to_local
 
@@ -26,7 +26,7 @@ class QuoteProvider:
 
     def get_market_snapshot(self, symbols):
         return [
-            {"code": symbol, "last_price": self.prices[symbol]}
+            {"code": symbol, "last_price": self.prices[symbol], "bid_price": self.prices[symbol] - 0.2}
             for symbol in symbols
             if symbol in self.prices
         ]
@@ -65,14 +65,14 @@ def test_futu_only_holding_becomes_managed_orphan_position(session):
 
 def test_orphan_position_reaching_default_profit_submits_sell_order(session):
     provider = PositionProvider([futu_position(price=103.1, available=80)])
-    settings = Settings()
+    settings = Settings(force_intraday_exit=False)
     sync_futu_positions_to_local(session, provider, settings)
 
     result = manage_positions(session, QuoteProvider(), provider, settings)
 
     order = session.query(SimOrder).one()
     assert result["exit_orders_submitted"] == 1
-    assert provider.orders == [("US.EMR", "SELL", 80, 103.1)]
+    assert provider.orders == [("US.EMR", "SELL", 80, 102.58)]
     assert order.side == "SELL"
     assert order.qty == 80
     assert order.reason == "ORPHAN_TAKE_PROFIT"
@@ -115,6 +115,51 @@ def test_missing_local_position_does_not_depend_on_old_order_record(session):
     assert session.query(SimOrder).filter_by(side="SELL", status="SUBMITTED").count() == 1
 
 
+def test_remote_position_binds_unresolved_local_buy_order_and_plan(session):
+    plan = TradePlan(
+        symbol="US.EMR",
+        source_structure_id=1,
+        battle_pool_id=1,
+        structure_type="BOTTOM_STRUCTURE",
+        priority_level="S",
+        direction="LONG",
+        stop_price=95,
+        target_1=110,
+        target_2=120,
+        trailing_rule="trail",
+        time_stop_rule="time",
+        invalid_condition="invalid",
+        risk_reward_1=1.5,
+        risk_reward_2=2,
+        status="ORDER_SUBMITTED",
+        reason="test",
+    )
+    session.add(plan)
+    session.flush()
+    order = SimOrder(
+        trade_plan_id=plan.id,
+        symbol="US.EMR",
+        side="BUY",
+        qty=100,
+        limit_price=100,
+        futu_order_id="missing-order",
+        status="UNKNOWN_REMOTE_MISSING",
+    )
+    session.add(order)
+    session.commit()
+
+    sync_futu_positions_to_local(session, PositionProvider([futu_position(price=103)]), Settings())
+
+    position = session.query(Position).filter_by(symbol="US.EMR").one()
+    assert position.source == "LOCAL_AND_FUTU_CONFIRMED"
+    assert position.is_orphan is False
+    assert position.source_trade_plan_id == plan.id
+    assert position.entry_order_id == order.id
+    assert order.status == "FILLED_INFERRED"
+    assert order.dealt_qty == 100
+    assert plan.status == "IN_POSITION"
+
+
 def test_one_position_failure_does_not_block_other_positions(session):
     session.add_all(
         [
@@ -151,7 +196,30 @@ def test_one_position_failure_does_not_block_other_positions(session):
     assert result["managed"] == 2
     assert result["errors"] == 1
     assert result["exit_orders_submitted"] == 1
-    assert provider.orders == [("US.GOOD", "SELL", 10, 103.5)]
+    assert provider.orders == [("US.GOOD", "SELL", 10, 102.98)]
+
+
+def test_target_one_partial_is_confirmed_only_after_sell_fill(session):
+    provider = PositionProvider([])
+    position = Position(
+        symbol="US.PART",
+        status="OPEN",
+        entry_price=100,
+        stop_price=95,
+        shares=10,
+        available_shares=10,
+        target_1=106,
+        risk_amount=50,
+    )
+    session.add(position)
+    session.commit()
+
+    manage_positions(session, QuoteProvider({"US.PART": 106.5}), provider, Settings(force_intraday_exit=False))
+
+    order = session.query(SimOrder).one()
+    assert order.reason == "TARGET_1_PARTIAL"
+    assert provider.orders == [("US.PART", "SELL", 5, 106.3)]
+    assert position.partial_exit_done is False
 
 
 def test_sell_order_failure_is_recorded_without_stopping_loop(session):

@@ -12,7 +12,16 @@ class QuoteProvider:
         self.price = price
 
     def get_market_snapshot(self, symbols):
-        return [{"code": f"US.{symbol}", "last_price": self.price, "bid_price": self.price - 0.01, "ask_price": self.price, "volume": 1000} for symbol in symbols]
+        return [
+            {
+                "code": symbol if str(symbol).startswith("US.") else f"US.{symbol}",
+                "last_price": self.price,
+                "bid_price": self.price - 0.01,
+                "ask_price": self.price,
+                "volume": 1000,
+            }
+            for symbol in symbols
+        ]
 
 
 def plan(symbol="AAPL", priority="S"):
@@ -51,6 +60,17 @@ def test_plan_becomes_triggered_only_inside_no_chase_range(session):
     session.add(MarketState(as_of=datetime.utcnow().date(), state="RISK_ON", reason="ok"))
     session.commit()
     validate_active_trade_plans(session, QuoteProvider(101), Settings())
+    assert record.status == "TRIGGERED"
+
+
+def test_realtime_validation_normalizes_us_prefixed_symbols(session):
+    record = plan("US.AAPL")
+    session.add(record)
+    session.add(MarketState(as_of=datetime.utcnow().date(), state="RISK_ON", reason="ok"))
+    session.commit()
+
+    validate_active_trade_plans(session, QuoteProvider(101), Settings())
+
     assert record.status == "TRIGGERED"
 
 

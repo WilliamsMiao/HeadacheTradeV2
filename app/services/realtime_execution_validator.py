@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.config import Settings
 from app.models import Indicator, MarketState, TradePlan, TradingState
 from app.services.audit import write_audit
+from app.services.position_sync import normalize_symbol
 
 
 VALIDATION_STATUSES = {"ACTIVE", "ARMED", "WAIT_PULLBACK", "PLANNED", "WAITLIST", "MISSED_BY_CAPITAL", "NO_CHASE"}
@@ -26,14 +27,14 @@ def validate_active_trade_plans(session: Session, quote_provider, settings: Sett
         )
     )
     snapshots = quote_provider.get_market_snapshot([plan.symbol for plan in plans]) if plans else []
-    by_symbol = {_symbol(row): row for row in snapshots}
+    by_symbol = {normalize_symbol(row.get("code") or row.get("symbol")): row for row in snapshots}
     market = session.scalar(select(MarketState).order_by(MarketState.updated_at.desc()).limit(1))
     market_state_current = _market_state_is_current(market)
     contexts: dict[int, dict] = {}
     counts = {"validated": 0, "triggered": 0, "invalidated": 0, "no_chase": 0}
 
     for plan in plans:
-        row = by_symbol.get(plan.symbol)
+        row = by_symbol.get(normalize_symbol(plan.symbol))
         if not row:
             plan.status = "PAUSED"
             plan.rules_reject_reason = "实时行情缺失"
@@ -131,10 +132,6 @@ def _short_trend_status(session: Session, symbol: str, current: float) -> tuple[
     if current >= indicator.ma20:
         return True, f"当前价未跌破 60 分钟 MA20（{indicator.ma20:.2f}）"
     return False, f"当前价低于 60 分钟 MA20（{indicator.ma20:.2f}）"
-
-
-def _symbol(row: dict) -> str:
-    return str(row.get("code") or row.get("symbol") or "").upper().removeprefix("US.")
 
 
 def _float(row: dict, *keys: str) -> float:

@@ -10,6 +10,7 @@ from app.services.position_sync import normalize_symbol
 
 
 OPEN_STATUSES = {"SUBMITTED", "SUBMITTING", "WAITING_SUBMIT", "PARTIALLY_FILLED", "PART_FILLED"}
+RECONCILE_STATUSES = {"SUBMITTED", "PARTIALLY_FILLED", "UNKNOWN_REMOTE_MISSING"}
 FILLED_STATUSES = {"FILLED", "FILLED_ALL"}
 CANCELLED_STATUSES = {"CANCELLED", "CANCELLED_ALL", "CANCELLED_PART"}
 FAILED_STATUSES = {"FAILED", "DISABLED", "DELETED"}
@@ -25,9 +26,9 @@ def sync_sim_orders(session: Session, trade_provider, timeout_seconds: int = 60)
             raise
         deals = []
         deals_supported = False
-    updated = filled = 0
+    updated = filled = missing = 0
     by_id = {str(row.get("order_id") or ""): row for row in rows}
-    for order in session.scalars(select(SimOrder).where(SimOrder.status.in_({"SUBMITTED", "PARTIALLY_FILLED"}))):
+    for order in session.scalars(select(SimOrder).where(SimOrder.status.in_(RECONCILE_STATUSES))):
         row = by_id.get(order.futu_order_id)
         if row:
             status = _normalize_status(str(row.get("order_status") or row.get("status") or ""))
@@ -43,11 +44,25 @@ def sync_sim_orders(session: Session, trade_provider, timeout_seconds: int = 60)
             if status in {"CANCELLED", "FAILED"}:
                 continue
         if order.status == "SUBMITTED" and order.submitted_at < datetime.utcnow() - timedelta(seconds=timeout_seconds):
+            if order.side == "SELL":
+                order.reason = _append_reason(order.reason, "风控卖出单未在 open orders 返回，等待持仓/成交对账确认")
+                write_audit(
+                    session,
+                    "SIM_ORDER_REMOTE_MISSING",
+                    symbol=order.symbol,
+                    subject_type="SimOrder",
+                    subject_id=order.id,
+                    status="WAITING_RECONCILIATION",
+                    reason=order.reason,
+                )
+                missing += 1
+                continue
             try:
                 trade_provider.cancel_order(order.futu_order_id)
             except Exception as exc:
                 if _is_missing_remote_order(exc):
-                    _mark_cancelled(session, order, "Futu 已不存在该订单，本地停止重复撤单")
+                    _mark_remote_missing(session, order, "Futu open orders 未返回该入场订单，等待成交/持仓对账确认")
+                    missing += 1
                 else:
                     order.reason = str(exc)
             else:
@@ -75,7 +90,7 @@ def sync_sim_orders(session: Session, trade_provider, timeout_seconds: int = 60)
             )
         )
     session.commit()
-    return {"updated": updated, "filled": filled, "deals_supported": deals_supported}
+    return {"updated": updated, "filled": filled, "missing": missing, "deals_supported": deals_supported}
 
 
 def _mark_cancelled(session: Session, order: SimOrder, reason: str) -> None:
@@ -91,6 +106,20 @@ def _mark_cancelled(session: Session, order: SimOrder, reason: str) -> None:
         symbol=order.symbol,
         subject_type="SimOrder",
         subject_id=order.id,
+        reason=reason,
+    )
+
+
+def _mark_remote_missing(session: Session, order: SimOrder, reason: str) -> None:
+    order.status = "UNKNOWN_REMOTE_MISSING"
+    order.reason = reason
+    write_audit(
+        session,
+        "SIM_ORDER_REMOTE_MISSING",
+        symbol=order.symbol,
+        subject_type="SimOrder",
+        subject_id=order.id,
+        status="WAITING_RECONCILIATION",
         reason=reason,
     )
 
@@ -145,6 +174,15 @@ def _open_or_close_position(session: Session, order: SimOrder) -> None:
                 position.status = "CLOSED"
                 position.exit_order_id = order.id
                 write_audit(session, "POSITION_CLOSED", symbol=order.symbol, subject_type="Position", subject_id=position.id)
+            elif order.reason == "TARGET_1_PARTIAL":
+                position.partial_exit_done = True
+                position.stop_price = max(position.stop_price, position.entry_price)
+
+
+def _append_reason(existing: str, addition: str) -> str:
+    if addition in (existing or ""):
+        return existing
+    return f"{existing}；{addition}" if existing else addition
 
 
 def _normalize_status(value: str) -> str:
