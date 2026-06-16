@@ -1,7 +1,7 @@
 import json
 from datetime import datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models import Position, SimDeal, SimOrder, TradePlan
@@ -10,7 +10,7 @@ from app.services.position_sync import normalize_symbol
 
 
 OPEN_STATUSES = {"SUBMITTED", "SUBMITTING", "WAITING_SUBMIT", "PARTIALLY_FILLED", "PART_FILLED"}
-RECONCILE_STATUSES = {"SUBMITTED", "PARTIALLY_FILLED", "UNKNOWN_REMOTE_MISSING"}
+RECONCILE_STATUSES = {"SUBMITTED", "PARTIALLY_FILLED", "UNKNOWN_REMOTE_MISSING", "SELL_WAITING_RECONCILIATION"}
 FILLED_STATUSES = {"FILLED", "FILLED_ALL"}
 CANCELLED_STATUSES = {"CANCELLED", "CANCELLED_ALL", "CANCELLED_PART"}
 FAILED_STATUSES = {"FAILED", "DISABLED", "DELETED"}
@@ -45,15 +45,17 @@ def sync_sim_orders(session: Session, trade_provider, timeout_seconds: int = 60)
                 continue
         if order.status == "SUBMITTED" and order.submitted_at < datetime.utcnow() - timedelta(seconds=timeout_seconds):
             if order.side == "SELL":
-                order.reason = _append_reason(order.reason, "风控卖出单未在 open orders 返回，等待持仓/成交对账确认")
+                reason = "风控卖出单未在 open orders 返回，等待持仓/成交对账确认"
+                order.status = "SELL_WAITING_RECONCILIATION"
+                order.reason = _append_reason(order.reason, reason)
                 write_audit(
                     session,
-                    "SIM_ORDER_REMOTE_MISSING",
+                    "SELL_ORDER_WAITING_RECONCILIATION",
                     symbol=order.symbol,
                     subject_type="SimOrder",
                     subject_id=order.id,
                     status="WAITING_RECONCILIATION",
-                    reason=order.reason,
+                    reason=reason,
                 )
                 missing += 1
                 continue
@@ -77,18 +79,27 @@ def sync_sim_orders(session: Session, trade_provider, timeout_seconds: int = 60)
         order = session.scalar(select(SimOrder).where(SimOrder.futu_order_id == str(row.get("order_id") or "")))
         if not order:
             continue
+        deal_qty = int(float(row.get("qty") or 0))
+        deal_price = float(row.get("price") or 0)
+        existing_qty = session.scalar(select(func.coalesce(func.sum(SimDeal.qty), 0)).where(SimDeal.sim_order_id == order.id)) or 0
         session.add(
             SimDeal(
                 sim_order_id=order.id,
                 symbol=order.symbol,
                 side=order.side,
-                qty=int(float(row.get("qty") or 0)),
-                price=float(row.get("price") or 0),
+                qty=deal_qty,
+                price=deal_price,
                 dealt_at=datetime.utcnow(),
                 futu_deal_id=deal_id,
                 raw_json=json.dumps(row, ensure_ascii=False, default=str),
             )
         )
+        order.dealt_qty = int(existing_qty) + deal_qty
+        order.dealt_avg_price = deal_price or order.dealt_avg_price
+        if order.dealt_qty >= order.qty:
+            order.status = "FILLED"
+            _open_or_close_position(session, order)
+            filled += 1
     session.commit()
     return {"updated": updated, "filled": filled, "missing": missing, "deals_supported": deals_supported}
 
@@ -173,6 +184,11 @@ def _open_or_close_position(session: Session, order: SimOrder) -> None:
             if position.shares == 0:
                 position.status = "CLOSED"
                 position.exit_order_id = order.id
+                exit_price = order.dealt_avg_price or order.limit_price
+                position.exit_price = exit_price
+                position.realized_pnl = (exit_price - position.entry_price) * sold
+                position.close_verified = True
+                position.close_source = "SELL_ORDER_FILLED"
                 write_audit(session, "POSITION_CLOSED", symbol=order.symbol, subject_type="Position", subject_id=position.id)
             elif order.reason == "TARGET_1_PARTIAL":
                 position.partial_exit_done = True

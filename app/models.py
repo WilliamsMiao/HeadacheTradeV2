@@ -355,6 +355,10 @@ class Position(Base, TimestampMixin):
     market_value: Mapped[float] = mapped_column(Float, default=0)
     unrealized_pnl: Mapped[float] = mapped_column(Float, default=0)
     unrealized_pnl_pct: Mapped[float] = mapped_column(Float, default=0)
+    exit_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    realized_pnl: Mapped[float | None] = mapped_column(Float, nullable=True)
+    close_verified: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    close_source: Mapped[str] = mapped_column(String(32), default="")
     take_profit_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     stop_loss_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -381,6 +385,7 @@ class SimOrder(Base, TimestampMixin):
     raw_response_json: Mapped[str] = mapped_column(Text, default="{}")
     dealt_qty: Mapped[int] = mapped_column(Integer, default=0)
     dealt_avg_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    retry_count: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class SimDeal(Base, TimestampMixin):
@@ -454,3 +459,22 @@ class SystemConfig(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     key: Mapped[str] = mapped_column(String(128), unique=True, index=True)
     value: Mapped[str] = mapped_column(Text, default="")
+
+
+class ReconciliationIssue(Base, TimestampMixin):
+    __tablename__ = "reconciliation_issues"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(32), default="", index=True)
+    issue_type: Mapped[str] = mapped_column(String(64), index=True)
+    severity: Mapped[str] = mapped_column(String(24), default="WARN", index=True)
+    status: Mapped[str] = mapped_column(String(24), default="OPEN", index=True)
+    remote_order_id: Mapped[str] = mapped_column(String(64), default="", index=True)
+    local_order_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    position_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    trade_plan_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    reason: Mapped[str] = mapped_column(Text, default="")
+    payload_json: Mapped[str] = mapped_column(Text, default="{}")
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

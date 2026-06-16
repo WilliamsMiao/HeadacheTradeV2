@@ -6,9 +6,10 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.config import Settings
-from app.models import AuditLog, Position, SimOrder, TradePlan, TradingState
+from app.models import AuditLog, Position, ReconciliationIssue, SimOrder, TradePlan, TradingState
 from app.services.audit import write_audit
 from app.services.portfolio_manager import PortfolioState, capital_allows_new_order
+from app.services.trade_reconciler import reconciliation_gate_status
 
 
 @dataclass(frozen=True)
@@ -80,6 +81,23 @@ def rules_approve_trade_plan(
         session.commit()
         return ApprovalDecision("REJECTED_BY_CAPITAL", capital_reason)
 
+    reconciliation_allowed, reconciliation_reason, reconciliation_payload = reconciliation_allows_new_entries(session)
+    if not reconciliation_allowed:
+        plan.rules_approval_status = "REJECTED_BY_RECONCILIATION"
+        plan.rules_reject_reason = reconciliation_reason
+        write_audit(
+            session,
+            "RULES_REJECTED_BY_RECONCILIATION",
+            symbol=plan.symbol,
+            subject_type="TradePlan",
+            subject_id=plan.id,
+            status="REJECTED",
+            reason=reconciliation_reason,
+            payload={"reconciliation": reconciliation_payload},
+        )
+        session.commit()
+        return ApprovalDecision("REJECTED_BY_RECONCILIATION", reconciliation_reason)
+
     plan.rules_approval_status = "APPROVED_FOR_SIM_TRADE"
     plan.rules_reject_reason = ""
     write_audit(
@@ -96,6 +114,37 @@ def rules_approve_trade_plan(
     return ApprovalDecision("APPROVED_FOR_SIM_TRADE", "全部自动审批规则通过")
 
 
+def reconciliation_allows_new_entries(session: Session) -> tuple[bool, str, dict]:
+    gate = reconciliation_gate_status(session)
+    if gate is None:
+        reason = "尚未完成交易对账，禁止新开仓"
+        return False, reason, {"allow_new_entries": False, "reason": reason, "mode": "SYNC_FAILED"}
+    blocking_issue = session.scalar(
+        select(ReconciliationIssue)
+        .where(
+            ReconciliationIssue.status == "OPEN",
+            ReconciliationIssue.severity.in_({"HIGH", "CRITICAL"}),
+        )
+        .order_by(ReconciliationIssue.severity.desc(), ReconciliationIssue.last_seen_at.desc())
+        .limit(1)
+    )
+    if blocking_issue:
+        reason = blocking_issue.reason or "存在 HIGH/CRITICAL 对账问题，禁止新开仓"
+        payload = dict(gate)
+        payload.update(
+            {
+                "blocking_issue_type": blocking_issue.issue_type,
+                "blocking_issue_id": blocking_issue.id,
+                "blocking_issue_severity": blocking_issue.severity,
+            }
+        )
+        return False, reason, payload
+    if gate.get("allow_new_entries") is False:
+        reason = str(gate.get("reason") or "交易对账闸门禁止新开仓")
+        return False, reason, dict(gate)
+    return True, str(gate.get("reason") or "交易对账闸门通过"), dict(gate)
+
+
 def _daily_risk_block(session: Session, settings: Settings) -> str:
     today = datetime.utcnow().date()
     submitted = session.scalar(
@@ -109,7 +158,11 @@ def _daily_risk_block(session: Session, settings: Settings) -> str:
     closed = list(
         session.scalars(
             select(Position)
-            .where(Position.status == "CLOSED", func.date(Position.updated_at) == today.isoformat())
+            .where(
+                Position.status == "CLOSED",
+                Position.close_verified.is_(True),
+                func.date(Position.updated_at) == today.isoformat(),
+            )
             .order_by(Position.updated_at.desc())
         )
     )

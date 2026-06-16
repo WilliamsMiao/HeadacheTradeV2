@@ -14,6 +14,11 @@ from app.services.position_sync import sync_futu_positions_to_local
 from app.services.realtime_execution_validator import validate_active_trade_plans
 from app.services.rules_approval import rules_approve_trade_plan
 from app.services.sim_order_executor import execute_approved_sim_orders
+from app.services.trade_reconciler import (
+    run_trade_reconciliation,
+    save_reconciliation_gate_failure,
+    save_reconciliation_gate_status,
+)
 
 
 def run_sim_loop(session: Session, settings: Settings, use_mock: bool = False) -> dict[str, object]:
@@ -22,7 +27,27 @@ def run_sim_loop(session: Session, settings: Settings, use_mock: bool = False) -
     trade_provider = MockTradeProvider() if use_mock else FutuTradeProvider(settings)
     try:
         synced = sync_sim_orders(session, trade_provider, settings.entry_order_timeout_seconds)
-        position_sync = sync_futu_positions_to_local(session, trade_provider, settings)
+        try:
+            position_sync = sync_futu_positions_to_local(session, trade_provider, settings)
+        except Exception as exc:
+            position_sync = {"remote": 0, "created": 0, "updated": 0, "closed": 0, "error": str(exc)}
+        try:
+            reconciliation = run_trade_reconciliation(session, trade_provider, settings)
+            save_reconciliation_gate_status(session, reconciliation)
+        except Exception as exc:
+            gate = save_reconciliation_gate_failure(session, f"交易对账运行失败：{exc}")
+            reconciliation = {
+                "ok": False,
+                "severity": gate["severity"],
+                "issues_opened": 1,
+                "issues_resolved": 0,
+                "open_issues": gate["open_issues"],
+                "critical_issues": gate["critical_issues"],
+                "high_issues": gate["high_issues"],
+                "allow_new_entries": False,
+                "reason": gate["reason"],
+                "mode": gate["mode"],
+            }
         managed = manage_positions(session, quote_provider, trade_provider, settings)
         portfolio = get_portfolio_state(session, trade_provider, settings)
         validation = validate_active_trade_plans(session, quote_provider, settings)
@@ -53,6 +78,7 @@ def run_sim_loop(session: Session, settings: Settings, use_mock: bool = False) -
         return {
             "synced": synced,
             "position_sync": position_sync,
+            "reconciliation": reconciliation,
             "positions": managed,
             "portfolio": portfolio.__dict__,
             "validation": validation,

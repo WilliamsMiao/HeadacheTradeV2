@@ -7,6 +7,7 @@ from app.models import (
     CandidateStock,
     KLine,
     Position,
+    ReconciliationIssue,
     SimOrder,
     AuditLog,
     StructureEvent,
@@ -72,6 +73,27 @@ def test_terminal_summary_uses_futu_sim_account_equity(session):
     assert payload["account_equity_source"] == "FUTU_SIM_ACCOUNT"
     assert payload["real_trading"] == "DISABLED"
     assert payload["can_open_new_position"] is True
+    assert payload["reconciliation"]["open_issues"] == 0
+
+
+def test_terminal_summary_exposes_reconciliation_status(session):
+    session.add(
+        ReconciliationIssue(
+            symbol="US.EMR",
+            issue_type="SELL_ORDER_STUCK",
+            severity="HIGH",
+            status="OPEN",
+            reason="风控卖单疑似卡住",
+        )
+    )
+    session.commit()
+
+    payload = terminal_summary(session, Settings())
+
+    assert payload["reconciliation"]["open_issues"] == 1
+    assert payload["reconciliation"]["high_issues"] == 1
+    assert payload["reconciliation"]["severity"] == "HIGH"
+    assert payload["reconciliation"]["allow_new_entries"] is False
 
 
 def test_trade_plan_list_orders_s_before_a_and_exposes_display_state(session):

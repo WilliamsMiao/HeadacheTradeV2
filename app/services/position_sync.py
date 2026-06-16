@@ -1,5 +1,6 @@
 import logging
-from datetime import UTC, datetime
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -10,6 +11,14 @@ from app.services.audit import write_audit
 
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class OrderMatchResult:
+    order: SimOrder | None
+    confidence: str
+    reason: str
+    candidates: list[SimOrder]
 
 
 def sync_futu_positions_to_local(
@@ -55,7 +64,8 @@ def sync_futu_positions_to_local(
 
         aliases = {symbol, symbol.removeprefix("US.")}
         position = session.scalar(select(Position).where(Position.symbol.in_(aliases)))
-        matching_buy_order = _matching_unresolved_buy_order(session, aliases)
+        match = _matching_unresolved_buy_order(session, aliases, quantity, cost, now, settings)
+        matching_buy_order = match.order
         if position is None:
             position = Position(
                 symbol=symbol,
@@ -94,9 +104,37 @@ def sync_futu_positions_to_local(
                     subject_id=matching_buy_order.id,
                     status="FILLED_INFERRED",
                     reason="Futu 持仓存在，推断入场订单已成交",
+                    payload={
+                        "match_confidence": match.confidence,
+                        "match_reason": match.reason,
+                        "remote_qty": quantity,
+                        "remote_cost": cost,
+                        "order_qty": matching_buy_order.qty,
+                        "order_limit_price": matching_buy_order.limit_price,
+                        "order_submitted_at": matching_buy_order.submitted_at.isoformat()
+                        if matching_buy_order.submitted_at
+                        else "",
+                    },
                 )
             else:
                 logger.warning("[SYNC] 本地不存在 %s 持仓，创建 orphan position", symbol)
+                if match.candidates:
+                    write_audit(
+                        session,
+                        "ORPHAN_POSITION_MATCH_LOW_CONFIDENCE",
+                        symbol=symbol,
+                        subject_type="Position",
+                        subject_id=position.id,
+                        status="WARNING",
+                        reason="Futu 持仓存在，但本地存在多个或低置信未完成 BUY 单，未自动绑定",
+                        payload={
+                            "symbol": symbol,
+                            "remote_qty": quantity,
+                            "remote_cost": cost,
+                            "candidate_order_ids": [order.id for order in match.candidates],
+                            "match_reason": match.reason,
+                        },
+                    )
             write_audit(
                 session,
                 "ORPHAN_POSITION_DETECTED",
@@ -142,7 +180,21 @@ def sync_futu_positions_to_local(
         if position.symbol in seen:
             continue
         if position.source in {"FUTU_DETECTED", "LOCAL_AND_FUTU_CONFIRMED"}:
-            position.status = "CLOSED"
+            filled_sell_order = _filled_sell_order(session, position)
+            if filled_sell_order:
+                _mark_verified_closed_from_sell_order(position, filled_sell_order, now)
+                status = "CLOSED"
+                action = "POSITION_RECONCILED_CLOSED"
+                reason = "Futu 模拟账户已无该持仓，且本地 SELL 成交已确认"
+            else:
+                position.status = "CLOSED_UNVERIFIED"
+                position.exit_price = None
+                position.realized_pnl = None
+                position.close_verified = False
+                position.close_source = "REMOTE_POSITION_MISSING"
+                status = "CLOSED_UNVERIFIED"
+                action = "POSITION_RECONCILED_CLOSED_UNVERIFIED"
+                reason = "Futu 模拟账户已无该持仓，但本地未确认 SELL 成交"
             position.exit_reason = position.exit_reason or "FUTU_POSITION_NO_LONGER_PRESENT"
             position.available_shares = 0
             position.last_synced_at = now
@@ -152,12 +204,12 @@ def sync_futu_positions_to_local(
                 plan.status = "COOLDOWN"
             write_audit(
                 session,
-                "POSITION_RECONCILED_CLOSED",
+                action,
                 symbol=position.symbol,
                 subject_type="Position",
                 subject_id=position.id,
-                status="CLOSED",
-                reason="Futu 模拟账户已无该持仓",
+                status=status,
+                reason=reason,
             )
 
     session.commit()
@@ -171,17 +223,85 @@ def normalize_symbol(value) -> str:
     return symbol if "." in symbol else f"US.{symbol}"
 
 
-def _matching_unresolved_buy_order(session: Session, aliases: set[str]) -> SimOrder | None:
+def _matching_unresolved_buy_order(
+    session: Session,
+    aliases: set[str],
+    remote_quantity: int,
+    remote_cost: float,
+    now: datetime,
+    settings: Settings,
+) -> OrderMatchResult:
+    candidates = list(
+        session.scalars(
+            select(SimOrder)
+            .where(
+                SimOrder.symbol.in_(aliases),
+                SimOrder.side == "BUY",
+                SimOrder.status.in_({"SUBMITTED", "PARTIALLY_FILLED", "UNKNOWN_REMOTE_MISSING"}),
+            )
+            .order_by(SimOrder.submitted_at.desc(), SimOrder.id.desc())
+        )
+    )
+    if not candidates:
+        return OrderMatchResult(None, "NONE", "没有本地未完成 BUY 候选订单", [])
+    if len(candidates) > 1:
+        return OrderMatchResult(None, "LOW", "存在多个同标的未完成 BUY 候选订单，避免误绑定", candidates)
+    order = candidates[0]
+    expected_qty = order.dealt_qty or order.qty
+    qty_tolerance = max(1, remote_quantity * 0.05)
+    qty_match = abs(expected_qty - remote_quantity) <= qty_tolerance
+    reference_price = order.dealt_avg_price or order.limit_price or order.submitted_price
+    price_available = remote_cost > 0 and bool(reference_price)
+    price_match = bool(price_available and abs(reference_price - remote_cost) / remote_cost <= 0.03)
+    time_match = bool(
+        order.submitted_at
+        and (
+            order.submitted_at.date() == now.date()
+            or order.submitted_at >= now - timedelta(minutes=settings.buy_order_match_window_minutes)
+        )
+    )
+    if qty_match and price_match and time_match:
+        return OrderMatchResult(order, "HIGH", "数量、价格和提交时间均匹配", candidates)
+    if qty_match and time_match and not price_available:
+        return OrderMatchResult(order, "MEDIUM", "数量和提交时间匹配，远端成本价或订单价格不可用", candidates)
+    misses = []
+    if not qty_match:
+        misses.append("数量不匹配")
+    if price_available and not price_match:
+        misses.append("价格偏差超过阈值")
+    if not price_available:
+        misses.append("价格数据不可用")
+    if not time_match:
+        misses.append("订单提交时间超出匹配窗口")
+    return OrderMatchResult(None, "LOW", "；".join(misses) or "低置信匹配", candidates)
+
+
+def _filled_sell_order(session: Session, position: Position) -> SimOrder | None:
+    aliases = {normalize_symbol(position.symbol), normalize_symbol(position.symbol).removeprefix("US.")}
     return session.scalar(
         select(SimOrder)
         .where(
             SimOrder.symbol.in_(aliases),
-            SimOrder.side == "BUY",
-            SimOrder.status.in_({"SUBMITTED", "PARTIALLY_FILLED", "UNKNOWN_REMOTE_MISSING"}),
+            SimOrder.side == "SELL",
+            SimOrder.status.in_({"FILLED", "FILLED_INFERRED"}),
         )
         .order_by(SimOrder.submitted_at.desc(), SimOrder.id.desc())
         .limit(1)
     )
+
+
+def _mark_verified_closed_from_sell_order(position: Position, order: SimOrder, now: datetime) -> None:
+    sold = order.dealt_qty or order.qty
+    exit_price = order.dealt_avg_price or order.limit_price
+    position.status = "CLOSED"
+    position.exit_order_id = order.id
+    position.exit_price = exit_price
+    position.realized_pnl = (exit_price - position.entry_price) * sold
+    position.close_verified = True
+    position.close_source = "SELL_ORDER_FILLED"
+    position.shares = 0
+    position.available_shares = 0
+    position.last_synced_at = now
 
 
 def _float_value(value) -> float:

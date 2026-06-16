@@ -1,3 +1,6 @@
+import json
+from datetime import datetime, timedelta
+
 from app.config import Settings
 from app.models import AuditLog, Position, SimOrder, TradePlan
 from app.services.position_manager import manage_positions
@@ -235,3 +238,232 @@ def test_sell_order_failure_is_recorded_without_stopping_loop(session):
     assert result["errors"] == 1
     assert "sell failed" in position.last_error
     assert session.query(AuditLog).filter_by(action="POSITION_EXIT_ORDER_FAILED").count() == 1
+
+
+def test_waiting_sell_order_retries_after_reconcile_window(session):
+    provider = PositionProvider([futu_position(price=94, available=100)])
+    position = Position(
+        symbol="US.EMR",
+        status="OPEN",
+        entry_price=100,
+        stop_price=95,
+        shares=100,
+        available_shares=100,
+        current_price=94,
+        risk_amount=500,
+        source="FUTU_DETECTED",
+        is_orphan=True,
+        last_synced_at=datetime.utcnow(),
+        exit_reason="HARD_STOP",
+    )
+    order = SimOrder(
+        symbol="US.EMR",
+        side="SELL",
+        qty=100,
+        limit_price=94,
+        futu_order_id="old-sell",
+        status="SELL_WAITING_RECONCILIATION",
+        reason="HARD_STOP；风控卖出单未在 open orders 返回，等待持仓/成交对账确认",
+        submitted_at=datetime.utcnow() - timedelta(minutes=5),
+        retry_count=0,
+    )
+    session.add_all([position, order])
+    session.commit()
+
+    result = manage_positions(
+        session,
+        QuoteProvider({"US.EMR": 94}),
+        provider,
+        Settings(force_intraday_exit=False, sell_reconcile_retry_seconds=120, max_exit_order_retries=3),
+    )
+
+    retried = session.query(SimOrder).filter_by(futu_order_id="order-1").one()
+    assert result["exit_orders_submitted"] == 1
+    assert retried.retry_count == 1
+    assert provider.orders == [("US.EMR", "SELL", 100, 93.8)]
+    assert session.query(AuditLog).filter_by(action="EXIT_ORDER_RETRIED").count() == 1
+
+
+def test_waiting_sell_order_before_retry_window_is_held(session):
+    provider = PositionProvider([futu_position(price=94, available=100)])
+    session.add_all(
+        [
+            Position(
+                symbol="US.EMR",
+                status="OPEN",
+                entry_price=100,
+                stop_price=95,
+                shares=100,
+                available_shares=100,
+                current_price=94,
+                risk_amount=500,
+                source="FUTU_DETECTED",
+                is_orphan=True,
+                last_synced_at=datetime.utcnow(),
+                exit_reason="HARD_STOP",
+            ),
+            SimOrder(
+                symbol="US.EMR",
+                side="SELL",
+                qty=100,
+                limit_price=94,
+                futu_order_id="old-sell",
+                status="SELL_WAITING_RECONCILIATION",
+                reason="HARD_STOP",
+                submitted_at=datetime.utcnow() - timedelta(seconds=30),
+            ),
+        ]
+    )
+    session.commit()
+
+    result = manage_positions(
+        session,
+        QuoteProvider({"US.EMR": 94}),
+        provider,
+        Settings(force_intraday_exit=False, sell_reconcile_retry_seconds=120),
+    )
+
+    assert result["exit_orders_submitted"] == 0
+    assert provider.orders == []
+    assert session.query(AuditLog).filter_by(action="EXIT_ORDER_RETRIED").count() == 0
+
+
+def test_waiting_sell_order_retry_limit_is_not_resubmitted(session):
+    provider = PositionProvider([futu_position(price=94, available=100)])
+    position = Position(
+        symbol="US.EMR",
+        status="OPEN",
+        entry_price=100,
+        stop_price=95,
+        shares=100,
+        available_shares=100,
+        current_price=94,
+        risk_amount=500,
+        source="FUTU_DETECTED",
+        is_orphan=True,
+        last_synced_at=datetime.utcnow(),
+        exit_reason="HARD_STOP",
+    )
+    order = SimOrder(
+        symbol="US.EMR",
+        side="SELL",
+        qty=100,
+        limit_price=94,
+        futu_order_id="old-sell",
+        status="SELL_WAITING_RECONCILIATION",
+        reason="HARD_STOP",
+        submitted_at=datetime.utcnow() - timedelta(minutes=5),
+        retry_count=3,
+    )
+    session.add_all([position, order])
+    session.commit()
+
+    result = manage_positions(
+        session,
+        QuoteProvider({"US.EMR": 94}),
+        provider,
+        Settings(force_intraday_exit=False, sell_reconcile_retry_seconds=120, max_exit_order_retries=3),
+    )
+
+    assert result["exit_orders_submitted"] == 0
+    assert provider.orders == []
+    assert "最大重试次数" in position.last_error
+    assert session.query(AuditLog).filter_by(action="EXIT_ORDER_RETRY_LIMIT_REACHED").count() == 1
+
+
+def test_multiple_buy_orders_do_not_low_confidence_bind(session):
+    plan = TradePlan(
+        symbol="US.EMR", source_structure_id=1, battle_pool_id=1,
+        structure_type="BOTTOM_STRUCTURE", priority_level="S", direction="LONG",
+        stop_price=95, target_1=110, target_2=120, trailing_rule="trail",
+        time_stop_rule="time", invalid_condition="invalid", risk_reward_1=1.5,
+        risk_reward_2=2, status="ORDER_SUBMITTED", reason="test",
+    )
+    session.add(plan)
+    session.flush()
+    session.add_all(
+        [
+            SimOrder(trade_plan_id=plan.id, symbol="US.EMR", side="BUY", qty=50, limit_price=100, status="UNKNOWN_REMOTE_MISSING"),
+            SimOrder(
+                trade_plan_id=plan.id,
+                symbol="US.EMR",
+                side="BUY",
+                qty=100,
+                limit_price=120,
+                status="UNKNOWN_REMOTE_MISSING",
+                submitted_at=datetime.utcnow() - timedelta(days=2),
+            ),
+        ]
+    )
+    session.commit()
+
+    sync_futu_positions_to_local(session, PositionProvider([futu_position(price=103, quantity=100)]), Settings())
+
+    position = session.query(Position).filter_by(symbol="US.EMR").one()
+    assert position.source == "FUTU_DETECTED"
+    assert position.is_orphan is True
+    assert position.source_trade_plan_id is None
+    assert position.entry_order_id is None
+    assert session.query(SimOrder).filter_by(status="FILLED_INFERRED").count() == 0
+    assert plan.status == "ORDER_SUBMITTED"
+    assert session.query(AuditLog).filter_by(action="ORPHAN_POSITION_MATCH_LOW_CONFIDENCE").count() == 1
+
+
+def test_high_confidence_buy_order_binds_with_match_payload(session):
+    plan = TradePlan(
+        symbol="US.EMR", source_structure_id=1, battle_pool_id=1,
+        structure_type="BOTTOM_STRUCTURE", priority_level="S", direction="LONG",
+        stop_price=95, target_1=110, target_2=120, trailing_rule="trail",
+        time_stop_rule="time", invalid_condition="invalid", risk_reward_1=1.5,
+        risk_reward_2=2, status="ORDER_SUBMITTED", reason="test",
+    )
+    session.add(plan)
+    session.flush()
+    order = SimOrder(
+        trade_plan_id=plan.id,
+        symbol="US.EMR",
+        side="BUY",
+        qty=100,
+        limit_price=100.2,
+        status="UNKNOWN_REMOTE_MISSING",
+        submitted_at=datetime.utcnow() - timedelta(minutes=10),
+    )
+    session.add(order)
+    session.commit()
+
+    sync_futu_positions_to_local(session, PositionProvider([futu_position(price=103, quantity=100)]), Settings())
+
+    position = session.query(Position).filter_by(symbol="US.EMR").one()
+    audit = session.query(AuditLog).filter_by(action="SIM_ORDER_FILLED_INFERRED").one()
+    payload = json.loads(audit.payload_json)
+    assert position.source == "LOCAL_AND_FUTU_CONFIRMED"
+    assert position.is_orphan is False
+    assert order.status == "FILLED_INFERRED"
+    assert order.dealt_qty == 100
+    assert order.dealt_avg_price == 100
+    assert plan.status == "IN_POSITION"
+    assert payload["match_confidence"] == "HIGH"
+
+
+def test_remote_position_missing_without_filled_sell_becomes_closed_unverified(session):
+    position = Position(
+        symbol="US.EMR",
+        status="OPEN",
+        entry_price=100,
+        stop_price=95,
+        shares=100,
+        available_shares=100,
+        risk_amount=500,
+        source="FUTU_DETECTED",
+        is_orphan=True,
+    )
+    session.add(position)
+    session.commit()
+
+    sync_futu_positions_to_local(session, PositionProvider([]), Settings())
+
+    assert position.status == "CLOSED_UNVERIFIED"
+    assert position.close_verified is False
+    assert position.exit_price is None
+    assert position.realized_pnl is None
+    assert session.query(AuditLog).filter_by(action="POSITION_RECONCILED_CLOSED_UNVERIFIED").count() == 1

@@ -183,6 +183,10 @@ def _migrate_sqlite_schema(target_engine=engine) -> None:
                 "market_value": "FLOAT DEFAULT 0",
                 "unrealized_pnl": "FLOAT DEFAULT 0",
                 "unrealized_pnl_pct": "FLOAT DEFAULT 0",
+                "exit_price": "FLOAT",
+                "realized_pnl": "FLOAT",
+                "close_verified": "BOOLEAN DEFAULT 0",
+                "close_source": "VARCHAR(32) DEFAULT ''",
                 "take_profit_pct": "FLOAT",
                 "stop_loss_pct": "FLOAT",
                 "last_synced_at": "DATETIME",
@@ -190,6 +194,60 @@ def _migrate_sqlite_schema(target_engine=engine) -> None:
                 "last_error": "TEXT DEFAULT ''",
             },
         )
+        _add_columns(
+            connection,
+            inspector,
+            tables,
+            "sim_orders",
+            {
+                "retry_count": "INTEGER DEFAULT 0",
+            },
+        )
+        if "reconciliation_issues" not in tables:
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE reconciliation_issues (
+                        id INTEGER PRIMARY KEY,
+                        symbol VARCHAR(32) DEFAULT '',
+                        issue_type VARCHAR(64),
+                        severity VARCHAR(24) DEFAULT 'WARN',
+                        status VARCHAR(24) DEFAULT 'OPEN',
+                        remote_order_id VARCHAR(64) DEFAULT '',
+                        local_order_id INTEGER,
+                        position_id INTEGER,
+                        trade_plan_id INTEGER,
+                        reason TEXT DEFAULT '',
+                        payload_json TEXT DEFAULT '{}',
+                        first_seen_at DATETIME,
+                        last_seen_at DATETIME,
+                        resolved_at DATETIME,
+                        created_at DATETIME,
+                        updated_at DATETIME
+                    )
+                    """
+                )
+            )
+            tables.add("reconciliation_issues")
+        if "reconciliation_issues" in tables:
+            for column in (
+                "symbol",
+                "issue_type",
+                "severity",
+                "status",
+                "remote_order_id",
+                "local_order_id",
+                "position_id",
+                "trade_plan_id",
+                "first_seen_at",
+                "last_seen_at",
+            ):
+                connection.execute(
+                    text(
+                        f"CREATE INDEX IF NOT EXISTS ix_reconciliation_issues_{column} "
+                        f"ON reconciliation_issues ({column})"
+                    )
+                )
 
 
 def _add_columns(connection, inspector, tables, table: str, additions: dict[str, str]) -> None:
