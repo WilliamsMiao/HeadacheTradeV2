@@ -21,7 +21,7 @@ export DEBIAN_FRONTEND=noninteractive
 apt_get_retry() {
   local attempt
   for attempt in $(seq 1 30); do
-    if apt-get "$@"; then
+    if apt-get -o DPkg::Lock::Timeout=300 "$@"; then
       return 0
     fi
     if [[ "${attempt}" == "30" ]]; then
