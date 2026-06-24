@@ -5,6 +5,7 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.config import get_settings
+from app.services.performance import install_sqlalchemy_performance_hooks
 
 
 class Base(DeclarativeBase):
@@ -23,6 +24,7 @@ if settings.database_url.startswith("sqlite:///./"):
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
 engine = create_engine(settings.database_url, connect_args=_connect_args(settings.database_url))
+install_sqlalchemy_performance_hooks(engine, settings)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 
@@ -248,6 +250,46 @@ def _migrate_sqlite_schema(target_engine=engine) -> None:
                         f"ON reconciliation_issues ({column})"
                     )
                 )
+        _ensure_performance_indexes(connection, tables)
+
+
+def _ensure_performance_indexes(connection, tables: set[str]) -> None:
+    indexes = {
+        "trade_plans": {
+            "ix_trade_plans_status_updated": "status, updated_at",
+            "ix_trade_plans_symbol_updated": "symbol, updated_at",
+            "ix_trade_plans_priority_updated": "priority_level, updated_at",
+            "ix_trade_plans_last_validated": "last_validated_at",
+            "ix_trade_plans_source_structure": "source_structure_id",
+            "ix_trade_plans_battle_pool": "battle_pool_id",
+        },
+        "sim_orders": {
+            "ix_sim_orders_plan_submitted": "trade_plan_id, submitted_at",
+            "ix_sim_orders_symbol_status": "symbol, status",
+            "ix_sim_orders_status_submitted": "status, submitted_at",
+            "ix_sim_orders_futu_order": "futu_order_id",
+        },
+        "positions": {
+            "ix_positions_status_updated": "status, updated_at",
+            "ix_positions_plan_updated": "source_trade_plan_id, updated_at",
+            "ix_positions_close_verified": "close_verified",
+        },
+        "audit_logs": {
+            "ix_audit_logs_subject_created": "subject_type, subject_id, created_at",
+            "ix_audit_logs_symbol_created": "symbol, created_at",
+            "ix_audit_logs_action_created": "action, created_at",
+        },
+        "reconciliation_issues": {
+            "ix_reconciliation_open_severity": "status, severity",
+            "ix_reconciliation_symbol_status": "symbol, status",
+            "ix_reconciliation_type_seen": "issue_type, last_seen_at",
+        },
+    }
+    for table, table_indexes in indexes.items():
+        if table not in tables:
+            continue
+        for name, columns in table_indexes.items():
+            connection.execute(text(f"CREATE INDEX IF NOT EXISTS {name} ON {table} ({columns})"))
 
 
 def _add_columns(connection, inspector, tables, table: str, additions: dict[str, str]) -> None:

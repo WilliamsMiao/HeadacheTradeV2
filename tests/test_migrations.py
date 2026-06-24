@@ -143,3 +143,25 @@ def test_reconciliation_issues_table_is_created_for_existing_sqlite_database():
     }.issubset(columns)
     assert "ix_reconciliation_issues_symbol" in indexes
     assert "ix_reconciliation_issues_last_seen_at" in indexes
+
+
+def test_performance_indexes_are_created_for_existing_sqlite_database():
+    engine = create_engine("sqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE trade_plans (id INTEGER PRIMARY KEY, status VARCHAR(24), symbol VARCHAR(32), priority_level VARCHAR(4), updated_at DATETIME, last_validated_at DATETIME, source_structure_id INTEGER, battle_pool_id INTEGER)"))
+        connection.execute(text("CREATE TABLE sim_orders (id INTEGER PRIMARY KEY, trade_plan_id INTEGER, symbol VARCHAR(32), status VARCHAR(32), side VARCHAR(8), submitted_at DATETIME, futu_order_id VARCHAR(64) DEFAULT '')"))
+        connection.execute(text("CREATE TABLE positions (id INTEGER PRIMARY KEY, symbol VARCHAR(32), status VARCHAR(32), source_trade_plan_id INTEGER, updated_at DATETIME, close_verified BOOLEAN)"))
+        connection.execute(text("CREATE TABLE audit_logs (id INTEGER PRIMARY KEY, action VARCHAR(64), symbol VARCHAR(32), subject_type VARCHAR(32), subject_id INTEGER, created_at DATETIME)"))
+
+    _migrate_sqlite_schema(engine)
+    _migrate_sqlite_schema(engine)
+
+    inspector = inspect(engine)
+    trade_plan_indexes = {index["name"] for index in inspector.get_indexes("trade_plans")}
+    order_indexes = {index["name"] for index in inspector.get_indexes("sim_orders")}
+    position_indexes = {index["name"] for index in inspector.get_indexes("positions")}
+    audit_indexes = {index["name"] for index in inspector.get_indexes("audit_logs")}
+    assert "ix_trade_plans_status_updated" in trade_plan_indexes
+    assert "ix_sim_orders_plan_submitted" in order_indexes
+    assert "ix_positions_plan_updated" in position_indexes
+    assert "ix_audit_logs_subject_created" in audit_indexes

@@ -84,20 +84,31 @@ def command_center_payload(session: Session, settings: Settings) -> dict:
     }
 
 
-def plan_view_model(session: Session, plan: TradePlan, settings: Settings) -> dict:
+def plan_view_model(
+    session: Session,
+    plan: TradePlan,
+    settings: Settings,
+    *,
+    validation: dict | None = None,
+    has_position: bool | None = None,
+    has_order: bool | None = None,
+    portfolio_sync: dict | None = None,
+) -> dict:
     status = status_for(plan.status)
-    validation = _latest_validation(session, plan)
+    validation = _latest_validation(session, plan) if validation is None else validation
     current = float(plan.current_price or 0)
     entry = float(plan.breakout_entry_price or 0)
     no_chase = float(plan.no_chase_above or 0)
     entry_ok = bool(current and entry and current >= entry)
     chase_ok = bool(current and (not no_chase or current <= no_chase))
-    has_position = bool(session.scalar(select(Position.id).where(Position.symbol == plan.symbol, Position.status == "OPEN")))
-    has_order = bool(session.scalar(select(SimOrder.id).where(
-        SimOrder.symbol == plan.symbol,
-        SimOrder.status.in_({"SUBMITTED", "PARTIALLY_FILLED"}),
-    )))
-    sync = portfolio_sync_status(session)
+    if has_position is None:
+        has_position = bool(session.scalar(select(Position.id).where(Position.symbol == plan.symbol, Position.status == "OPEN")))
+    if has_order is None:
+        has_order = bool(session.scalar(select(SimOrder.id).where(
+            SimOrder.symbol == plan.symbol,
+            SimOrder.status.in_({"SUBMITTED", "PARTIALLY_FILLED"}),
+        )))
+    sync = portfolio_sync_status(session) if portfolio_sync is None else portfolio_sync
     capital_ok = sync.get("ok", False) and sync.get("status") == "CAPITAL_AVAILABLE"
     checks = [
         _check("已经到达计划入场价", entry_ok, _entry_price_detail(current, entry)),

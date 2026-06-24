@@ -73,6 +73,7 @@ from app.services.command_center import command_center_payload
 from app.services.plan_prices import refresh_trade_plan_prices
 from app.services.portfolio_manager import futu_position_snapshot, portfolio_sync_status
 from app.services.freshness import freshness_context
+from app.services.performance import performance_middleware
 from app.providers.futu_provider import FutuProvider
 from app.services.view_models import (
     battle_view_models,
@@ -92,7 +93,7 @@ from app.services.terminal_api import (
     positions_payload,
     response_envelope,
     structures_payload,
-    terminal_summary,
+    cached_terminal_summary,
     timeline_payload,
     trade_plan_overlay_payload,
     trade_plan_detail,
@@ -194,6 +195,11 @@ def startup() -> None:
 
 
 @app.middleware("http")
+async def record_performance(request: Request, call_next):
+    return await performance_middleware(request, call_next, get_settings())
+
+
+@app.middleware("http")
 async def require_authentication(request: Request, call_next):
     path = request.url.path
     if path.startswith("/static/") or path in PUBLIC_PATHS:
@@ -261,11 +267,11 @@ def dashboard(request: Request, session: Session = Depends(get_session)):
 
 
 @app.get("/candidates", response_class=HTMLResponse)
-def candidates_page(request: Request, pool: str = "", session: Session = Depends(get_session)):
+def candidates_page(request: Request, pool: str = "", limit: int = 200, session: Session = Depends(get_session)):
     query = select(CandidateStock).where(CandidateStock.active.is_(True))
     if pool:
         query = query.where(CandidateStock.pool_types_json.contains(f'"{pool}"'))
-    items = list(session.scalars(query.order_by(CandidateStock.rank_score.desc(), CandidateStock.symbol)))
+    items = list(session.scalars(query.order_by(CandidateStock.rank_score.desc(), CandidateStock.symbol).limit(max(1, min(limit, 500)))))
     return templates.TemplateResponse(
         request,
         "candidates.html",
@@ -279,13 +285,13 @@ def candidates_page(request: Request, pool: str = "", session: Session = Depends
 
 
 @app.get("/structures", response_class=HTMLResponse)
-def structures_page(request: Request, scope: str = "active", session: Session = Depends(get_session)):
+def structures_page(request: Request, scope: str = "active", limit: int = 100, session: Session = Depends(get_session)):
     scope = scope if scope in {"active", "history"} else "active"
     query = (
         select(StructureEvent)
         .where(StructureEvent.timeframe == STRUCTURE_TIMEFRAME)
         .order_by(StructureEvent.event_ts.desc())
-        .limit(300)
+        .limit(max(1, min(limit, 500)))
     )
     if scope == "active":
         query = (
@@ -296,7 +302,7 @@ def structures_page(request: Request, scope: str = "active", session: Session = 
             )
             .where(StructureEvent.timeframe == STRUCTURE_TIMEFRAME)
             .order_by(StructureEvent.event_ts.desc())
-            .limit(300)
+            .limit(max(1, min(limit, 500)))
         )
     events = list(
         session.scalars(query)
@@ -310,24 +316,29 @@ def structures_page(request: Request, scope: str = "active", session: Session = 
 
 
 @app.get("/battle-pool", response_class=HTMLResponse)
-def battle_pool_page(request: Request, session: Session = Depends(get_session)):
+def battle_pool_page(request: Request, limit: int = 100, session: Session = Depends(get_session)):
     items = list(
         session.scalars(
             select(BattlePoolItem)
             .where(BattlePoolItem.status == "ACTIVE")
             .order_by(BattlePoolItem.score.desc(), BattlePoolItem.symbol)
+            .limit(max(1, min(limit, 500)))
         )
     )
     return templates.TemplateResponse(request, "battle_pool.html", {"items": battle_view_models(session, items), "freshness": freshness_context(session, sections={"battle"})["battle"]})
 
 
 @app.get("/trade-plans", response_class=HTMLResponse)
-def trade_plans_page(request: Request, session: Session = Depends(get_session)):
+def trade_plans_page(request: Request, status: str = "", limit: int = 100, session: Session = Depends(get_session)):
+    bounded_limit = max(1, min(limit, 500))
+    query = select(TradePlan).where(TradePlan.status != "EXPIRED")
+    if status:
+        query = query.where(TradePlan.status == status.upper())
     plans = list(
         session.scalars(
-            select(TradePlan)
-            .where(TradePlan.status != "EXPIRED")
+            query
             .order_by(_trade_plan_priority_order(), TradePlan.updated_at.desc())
+            .limit(bounded_limit)
         )
     )
     return templates.TemplateResponse(
@@ -339,7 +350,7 @@ def trade_plans_page(request: Request, session: Session = Depends(get_session)):
 
 @app.get("/api/terminal/summary")
 def terminal_summary_api(session: Session = Depends(get_session)):
-    summary = terminal_summary(session, get_settings())
+    summary = cached_terminal_summary(session, get_settings())
     return response_envelope(
         summary,
         source=summary["account_equity_source"],
@@ -354,6 +365,7 @@ def trade_plans_api(
     priority: str = "",
     direction: str = "",
     active_only: bool = True,
+    limit: int = 100,
     session: Session = Depends(get_session),
 ):
     plans = trade_plan_list(
@@ -364,6 +376,7 @@ def trade_plans_api(
         priority=priority,
         direction=direction,
         active_only=active_only,
+        limit=limit,
     )
     synced_at = max((plan["updated_at"] for plan in plans if plan["updated_at"]), default=None)
     return response_envelope(plans, source="HEADACHE_TRADE_DB", synced_at=synced_at)
@@ -390,8 +403,8 @@ def trade_plan_detail_api(plan_id: int, session: Session = Depends(get_session))
 
 
 @app.get("/api/positions")
-def positions_api(symbol: str = "", session: Session = Depends(get_session)):
-    positions = positions_payload(session, symbol)
+def positions_api(symbol: str = "", limit: int = 300, session: Session = Depends(get_session)):
+    positions = positions_payload(session, symbol, limit)
     synced_at = max((position["updated_at"] for position in positions if position["updated_at"]), default=None)
     return response_envelope(positions, source="FUTU_SIM_ACCOUNT", synced_at=synced_at)
 
@@ -407,8 +420,8 @@ def futu_positions_api(session: Session = Depends(get_session)):
 
 
 @app.get("/api/sim-orders")
-def sim_orders_api(symbol: str = "", session: Session = Depends(get_session)):
-    orders = orders_payload(session, symbol)
+def sim_orders_api(symbol: str = "", limit: int = 300, session: Session = Depends(get_session)):
+    orders = orders_payload(session, symbol, limit)
     synced_at = max((order["submitted_at"] for order in orders if order["submitted_at"]), default=None)
     return response_envelope(orders, source="FUTU_SIM_ACCOUNT", synced_at=synced_at)
 

@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+import time
 
 from collections import Counter
 
@@ -40,6 +41,7 @@ ACTIVE_PLAN_STATUSES = {
     "BLOCKED",
     "PAUSED",
 }
+_SUMMARY_CACHE: dict[str, object] = {"expires_at": 0.0, "payload": None}
 TERMINAL_KLINE_TIMEFRAMES = {"1m", "5m", "15m", "60m", "1d"}
 AUDIT_ACTION_NAMES = {
     "MISSED_BY_CAPITAL": "资金条件未满足",
@@ -121,6 +123,25 @@ def terminal_summary(session: Session, settings: Settings) -> dict:
     }
 
 
+def cached_terminal_summary(session: Session, settings: Settings) -> dict:
+    ttl = max(0, int(settings.summary_cache_ttl_seconds))
+    if ttl <= 0:
+        return terminal_summary(session, settings)
+    now = time.monotonic()
+    cached = _SUMMARY_CACHE.get("payload")
+    if cached is not None and now < float(_SUMMARY_CACHE.get("expires_at") or 0):
+        return cached  # type: ignore[return-value]
+    payload = terminal_summary(session, settings)
+    _SUMMARY_CACHE["payload"] = payload
+    _SUMMARY_CACHE["expires_at"] = now + ttl
+    return payload
+
+
+def clear_terminal_summary_cache() -> None:
+    _SUMMARY_CACHE["payload"] = None
+    _SUMMARY_CACHE["expires_at"] = 0.0
+
+
 def _reconciliation_summary(session: Session) -> dict:
     gate = reconciliation_gate_status(session)
     if gate is not None:
@@ -168,6 +189,7 @@ def trade_plan_list(
     priority: str = "",
     direction: str = "",
     active_only: bool = True,
+    limit: int = 100,
 ) -> list[dict]:
     query = select(TradePlan)
     if active_only:
@@ -181,7 +203,8 @@ def trade_plan_list(
         query = query.where(TradePlan.priority_level.in_(priorities))
     if direction:
         query = query.where(TradePlan.direction == direction.upper())
-    plans = list(session.scalars(query.order_by(TradePlan.updated_at.desc(), TradePlan.id.desc())))
+    bounded_limit = max(1, min(limit, 500))
+    plans = list(session.scalars(query.order_by(TradePlan.updated_at.desc(), TradePlan.id.desc()).limit(bounded_limit)))
     plans.sort(key=lambda plan: (_priority_rank(plan.priority_level), -plan.updated_at.timestamp(), -plan.id))
     return [_serialize_trade_plan(session, plan, settings) for plan in plans]
 
@@ -237,19 +260,19 @@ def trade_plan_detail(session: Session, plan: TradePlan, settings: Settings) -> 
     }
 
 
-def positions_payload(session: Session, symbol: str = "") -> list[dict]:
+def positions_payload(session: Session, symbol: str = "", limit: int = 300) -> list[dict]:
     query = select(Position)
     if symbol:
         query = query.where(Position.symbol == symbol.upper())
-    positions = list(session.scalars(query.order_by(Position.updated_at.desc()).limit(300)))
+    positions = list(session.scalars(query.order_by(Position.updated_at.desc()).limit(max(1, min(limit, 500)))))
     return [_serialize_position(position) for position in positions if position is not None]
 
 
-def orders_payload(session: Session, symbol: str = "") -> list[dict]:
+def orders_payload(session: Session, symbol: str = "", limit: int = 300) -> list[dict]:
     query = select(SimOrder)
     if symbol:
         query = query.where(SimOrder.symbol == symbol.upper())
-    orders = list(session.scalars(query.order_by(SimOrder.submitted_at.desc()).limit(300)))
+    orders = list(session.scalars(query.order_by(SimOrder.submitted_at.desc()).limit(max(1, min(limit, 500)))))
     return [_serialize_order(order) for order in orders]
 
 
@@ -556,15 +579,23 @@ def structures_payload(session: Session, symbol: str, timeframe: str = "60m", li
         )
     )
     events.reverse()
+    structure_ids = [event.id for event in events]
+    battles_by_structure_id = {
+        battle.source_structure_id: battle
+        for battle in session.scalars(select(BattlePoolItem).where(BattlePoolItem.source_structure_id.in_(structure_ids)))
+    } if structure_ids else {}
+    plans_by_structure_id = {}
+    if structure_ids:
+        for plan in session.scalars(
+            select(TradePlan)
+            .where(TradePlan.source_structure_id.in_(structure_ids))
+            .order_by(TradePlan.source_structure_id, TradePlan.updated_at.desc(), TradePlan.id.desc())
+        ):
+            plans_by_structure_id.setdefault(plan.source_structure_id, plan)
     output = []
     for event in events:
-        battle = session.scalar(select(BattlePoolItem).where(BattlePoolItem.source_structure_id == event.id))
-        plan = session.scalar(
-            select(TradePlan)
-            .where(TradePlan.source_structure_id == event.id)
-            .order_by(TradePlan.updated_at.desc())
-            .limit(1)
-        )
+        battle = battles_by_structure_id.get(event.id)
+        plan = plans_by_structure_id.get(event.id)
         payload = _structure_payload(event)
         payload.update({
             "linked_battle_item_id": battle.id if battle else None,

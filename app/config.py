@@ -43,6 +43,14 @@ class Settings(BaseSettings):
     max_realtime_subscriptions: int = 30
     max_orderbook_subscriptions: int = 10
     max_ticker_subscriptions: int = 10
+    perf_log_enabled: bool = True
+    slow_request_ms: int = 500
+    slow_sql_ms: int = 100
+    summary_cache_ttl_seconds: int = 2
+    perf_log_enabled: bool = True
+    slow_request_ms: int = 500
+    slow_sql_ms: int = 100
+    summary_cache_ttl_seconds: int = 2
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

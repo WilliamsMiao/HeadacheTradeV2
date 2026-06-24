@@ -15,6 +15,8 @@ from app.models import (
     TradePlan,
 )
 from app.services.terminal_api import (
+    cached_terminal_summary,
+    clear_terminal_summary_cache,
     daily_stats_payload,
     first_valid_trade_payload,
     journal_summary_payload,
@@ -106,6 +108,46 @@ def test_trade_plan_list_orders_s_before_a_and_exposes_display_state(session):
     assert plans[0]["display_status"]["display_name"] == "持续监控中"
     assert plans[0]["next_system_action"]
     assert plans[0]["checks"]
+
+
+def test_trade_plan_list_limit_caps_results(session):
+    for index in range(5):
+        session.add(_plan(f"US.T{index}", "A"))
+    session.commit()
+
+    plans = trade_plan_list(session, Settings(), active_only=False, limit=2)
+
+    assert len(plans) == 2
+
+
+def test_terminal_summary_cache_can_reuse_short_lived_payload(session):
+    settings = Settings(summary_cache_ttl_seconds=2)
+    session.add(SystemConfig(
+        key="portfolio_sync_status",
+        value=(
+            '{"ok": true, "status": "CAPITAL_AVAILABLE", "account_equity": 1000000, '
+            '"available_cash": 800000, "account_equity_source": "FUTU_SIM_ACCOUNT", '
+            '"account_equity_sync_status": "OK", "updated_at": "2026-06-12T06:00:00+00:00"}'
+        ),
+    ))
+    session.commit()
+    clear_terminal_summary_cache()
+
+    first = cached_terminal_summary(session, settings)
+    config = session.query(SystemConfig).filter(SystemConfig.key == "portfolio_sync_status").one()
+    config.value = (
+        '{"ok": true, "status": "CAPITAL_AVAILABLE", "account_equity": 2000000, '
+        '"available_cash": 1800000, "account_equity_source": "FUTU_SIM_ACCOUNT", '
+        '"account_equity_sync_status": "OK", "updated_at": "2026-06-12T06:00:01+00:00"}'
+    )
+    session.commit()
+    second = cached_terminal_summary(session, settings)
+    clear_terminal_summary_cache()
+    third = cached_terminal_summary(session, settings)
+
+    assert first["account_equity"] == 1000000
+    assert second["account_equity"] == 1000000
+    assert third["account_equity"] == 2000000
 
 
 def test_trade_plan_detail_returns_complete_readonly_chain(session):
