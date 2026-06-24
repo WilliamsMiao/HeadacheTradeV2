@@ -17,8 +17,24 @@ if [[ "$(id -u)" -ne 0 ]]; then
 fi
 
 export DEBIAN_FRONTEND=noninteractive
-apt-get update
-apt-get install -y ca-certificates curl nginx sudo
+
+apt_get_retry() {
+  local attempt
+  for attempt in $(seq 1 30); do
+    if apt-get "$@"; then
+      return 0
+    fi
+    if [[ "${attempt}" == "30" ]]; then
+      echo "apt-get $* failed after ${attempt} attempts" >&2
+      return 1
+    fi
+    echo "apt lock or transient apt failure detected; retrying apt-get $* in 10 seconds (${attempt}/30)" >&2
+    sleep 10
+  done
+}
+
+apt_get_retry update
+apt_get_retry install -y ca-certificates curl nginx sudo
 
 if ! command -v uv >/dev/null 2>&1; then
   curl -LsSf https://astral.sh/uv/install.sh | sh
