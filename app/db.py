@@ -1,7 +1,7 @@
 from collections.abc import Generator
 from pathlib import Path
 
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.config import get_settings
@@ -14,8 +14,31 @@ class Base(DeclarativeBase):
 
 def _connect_args(database_url: str) -> dict[str, object]:
     if database_url.startswith("sqlite"):
-        return {"check_same_thread": False}
+        return {"check_same_thread": False, "timeout": 30.0}
     return {}
+
+
+def _install_sqlite_pragmas(target_engine) -> None:
+    if not target_engine.url.get_backend_name().startswith("sqlite"):
+        return
+    if getattr(target_engine, "_headache_sqlite_pragmas_installed", False):
+        return
+
+    @event.listens_for(target_engine, "connect")
+    def _set_sqlite_pragmas(dbapi_connection, connection_record):  # noqa: ANN001, ARG001
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA busy_timeout=30000")
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.execute("PRAGMA temp_store=MEMORY")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        try:
+            cursor.execute("PRAGMA journal_mode=WAL")
+        except Exception:
+            # In-memory SQLite and some read-only connections cannot switch journal mode.
+            pass
+        cursor.close()
+
+    setattr(target_engine, "_headache_sqlite_pragmas_installed", True)
 
 
 settings = get_settings()
@@ -24,6 +47,7 @@ if settings.database_url.startswith("sqlite:///./"):
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
 engine = create_engine(settings.database_url, connect_args=_connect_args(settings.database_url))
+_install_sqlite_pragmas(engine)
 install_sqlalchemy_performance_hooks(engine, settings)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 

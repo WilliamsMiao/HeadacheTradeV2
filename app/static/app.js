@@ -210,8 +210,13 @@ async function refreshLivePlanPrices() {
       ? new Intl.DateTimeFormat("zh-CN", {hour: "2-digit", minute: "2-digit", second: "2-digit"}).format(new Date(payload.updated_at))
       : "刚刚";
     statusNodes.forEach((node) => {
-      node.textContent = `OpenD 实时价已更新 · ${updatedAt}`;
-      node.dataset.tone = "success";
+      if (payload.warning) {
+        node.textContent = `实时价暂未刷新，保留最后有效价 · ${payload.warning}`;
+        node.dataset.tone = "warning";
+      } else {
+        node.textContent = `OpenD 实时价已更新 · ${updatedAt}`;
+        node.dataset.tone = "success";
+      }
     });
   } catch (error) {
     statusNodes.forEach((node) => {

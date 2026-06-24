@@ -6,6 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from sqlalchemy import case, select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 from starlette.requests import Request
 
@@ -387,6 +388,17 @@ def trade_plan_prices_api(session: Session = Depends(get_session)):
     provider = FutuProvider(get_settings())
     try:
         return refresh_trade_plan_prices(session, provider)
+    except OperationalError as exc:
+        session.rollback()
+        if "database is locked" in str(exc).lower():
+            return {
+                "prices": {},
+                "changes": {},
+                "statuses": {},
+                "updated_at": None,
+                "warning": "数据库正在处理后台任务，本次实时价暂未写入，页面将保留最后一次有效价格。",
+            }
+        raise
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"OpenD 实时行情暂不可用：{exc}") from exc
     finally:

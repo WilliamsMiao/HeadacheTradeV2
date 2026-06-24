@@ -1,5 +1,8 @@
 from datetime import UTC, datetime
 
+from sqlalchemy.exc import OperationalError
+
+from app import main as app_main
 from app.main import app
 from app.config import Settings
 from app.models import (
@@ -118,6 +121,18 @@ def test_trade_plan_list_limit_caps_results(session):
     plans = trade_plan_list(session, Settings(), active_only=False, limit=2)
 
     assert len(plans) == 2
+
+
+def test_trade_plan_prices_api_treats_sqlite_lock_as_retryable_warning(session, monkeypatch):
+    def locked(*args, **kwargs):
+        raise OperationalError("UPDATE trade_plans", {}, Exception("database is locked"))
+
+    monkeypatch.setattr(app_main, "refresh_trade_plan_prices", locked)
+
+    payload = app_main.trade_plan_prices_api(session)
+
+    assert payload["prices"] == {}
+    assert "数据库正在处理后台任务" in payload["warning"]
 
 
 def test_terminal_summary_cache_can_reuse_short_lived_payload(session):

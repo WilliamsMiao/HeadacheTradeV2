@@ -1265,6 +1265,10 @@ td a + small {
   color: var(--color-success);
 }
 
+.live-price-status[data-tone="warning"] {
+  color: var(--color-warning);
+}
+
 .live-price-status[data-tone="error"] {
   color: var(--color-danger);
 }

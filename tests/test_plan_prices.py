@@ -39,8 +39,24 @@ def test_refresh_trade_plan_prices_updates_live_values(session):
 
     payload = refresh_trade_plan_prices(session, QuoteProvider())
 
-    assert payload["prices"] == {"AAPL": 201.25, "MSFT": 420.5}
-    assert payload["statuses"] == {"AAPL": "ACTIVE", "MSFT": "ACTIVE"}
+    assert payload["prices"]["AAPL"] == 201.25
+    assert payload["prices"]["US.AAPL"] == 201.25
+    assert payload["prices"]["MSFT"] == 420.5
+    assert payload["statuses"]["AAPL"] == "ACTIVE"
+    assert payload["statuses"]["US.AAPL"] == "ACTIVE"
     plans = {plan.symbol: plan for plan in session.query(TradePlan).all()}
     assert plans["AAPL"].current_price == 201.25
     assert plans["MSFT"].current_change_pct == -0.0025
+
+
+def test_refresh_trade_plan_prices_matches_us_prefixed_symbols(session):
+    session.add_all([_plan("US.MSFT", "A"), _plan("US.AAPL", "S")])
+    session.commit()
+
+    payload = refresh_trade_plan_prices(session, QuoteProvider())
+
+    assert payload["prices"]["US.AAPL"] == 201.25
+    assert payload["prices"]["AAPL"] == 201.25
+    plans = {plan.symbol: plan for plan in session.query(TradePlan).all()}
+    assert plans["US.AAPL"].current_price == 201.25
+    assert plans["US.MSFT"].current_change_pct == -0.0025
